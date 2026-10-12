@@ -28,7 +28,7 @@ def main():
                 else:
                     skipped += 1
         # Archive URLs have unknown methods: do not label them as observed GETs.
-        for pattern in ('*_gau*.txt', '*_waybackurls*.txt', '*_katana*.txt'):
+        for pattern in ('*_gau*.txt', '*_waybackurls*.txt', '*_katana*.txt', '*_crawl*.txt'):
             for path in sorted(args.results.glob(pattern)):
                 for r in load_records(path, fmt='urls'):
                     if scope.allows(r['url']):

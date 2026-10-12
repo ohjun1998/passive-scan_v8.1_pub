@@ -1,58 +1,96 @@
 #!/usr/bin/env python3
-"""Bounded scoped JS downloader with collision-free filenames and source mappings."""
+"""Opt-in, paced scoped JS downloads with persistent cache and run-wide budgets."""
 import argparse
-import concurrent.futures
 import hashlib
 import json
+import shutil
+import time
 from pathlib import Path
-from urllib.error import URLError
-from urllib.request import HTTPRedirectHandler, Request, build_opener
 from recon81.core import Scope, private_write, safe_url
+from recon81.network_policy import NetworkPolicy
+from recon81.guard import RunGuard, ProtectedHTTP, GuardStopped
 
-LIMIT = 2 * 1024 * 1024
+LIMIT = 2*1024*1024
 
 
-class ScopedRedirect(HTTPRedirectHandler):
-    def __init__(self, scope):
-        self.scope = scope
+def cached_keys(path, ttl=7*86400):
+    if not path.exists():
+        return set()
+    result=set()
+    for line in path.read_text(encoding='utf-8').splitlines():
+        try:
+            item=json.loads(line)
+            if time.time()-float(item['downloaded_at']) < ttl:
+                result.add(item['url_hash'])
+        except (ValueError,KeyError,TypeError):
+            continue
+    return result
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        if not self.scope.allows(newurl):
-            raise URLError('Out of scope redirect')
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+def download(urls, client, policy, output, mapping, cache, max_files=100, min_free_bytes=256*1024*1024):
+    output.mkdir(parents=True,exist_ok=True)
+    known=cached_keys(cache)
+    rows=[]
+    downloaded=0
+    for url in sorted(set(urls)):
+        key=hashlib.sha256(url.encode()).hexdigest()
+        if key in known or policy.reason(url) or not url.split('?',1)[0].lower().endswith('.js'):
+            continue
+        if downloaded >= max_files:
+            break
+        if shutil.disk_usage(output).free < min_free_bytes:
+            break
+        try:
+            response=client.get(url,LIMIT)
+        except GuardStopped as error:
+            if 'budget_exhausted' in str(error):
+                break
+            raise
+        if response['status']!=200 or not response['complete']:
+            continue
+        name=key+'.js'
+        target=output/name
+        with open(target,'wb') as stream:
+            stream.write(response['body'])
+        target.chmod(0o600)
+        rows.append(name+'\t'+safe_url(url))
+        cache.parent.mkdir(parents=True,exist_ok=True)
+        with open(cache,'a',encoding='utf-8') as stream:
+            stream.write(json.dumps({'url_hash':key,'url':safe_url(url),'downloaded_at':time.time()},ensure_ascii=False)+'\n')
+        cache.chmod(0o600)
+        known.add(key)
+        downloaded+=1
+    private_write(mapping,'\n'.join(rows)+ ('\n' if rows else ''))
+    return downloaded
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--urls', type=Path, required=True)
-    parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--mapping', type=Path, required=True)
-    parser.add_argument('--scope', action='append', required=True)
-    args = parser.parse_args()
-    scope = Scope(args.scope)
-    args.output.mkdir(parents=True, exist_ok=True, mode=0o700)
-    urls = sorted(set(args.urls.read_text(encoding='utf-8').splitlines()))[:1000]
-    def download(url):
-        if not scope.allows(url):
-            return None
-        name = hashlib.sha256(url.encode()).hexdigest() + '.js'
-        try:
-            with build_opener(ScopedRedirect(scope)).open(Request(url, headers={'User-Agent': 'PassiveScan/8.1'}), timeout=5) as response:
-                data = response.read(LIMIT + 1)
-                if len(data) > LIMIT:
-                    return None
-            target = args.output / name
-            with open(target, 'wb') as stream:
-                stream.write(data)
-            target.chmod(0o600)
-            return name + '\t' + safe_url(url)
-        except (OSError, ValueError):
-            return None
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-        rows = [r for r in pool.map(download, urls) if r]
-    private_write(args.mapping, '\n'.join(rows) + ('\n' if rows else ''))
-    print('Downloaded JS files: ' + str(len(rows)))
+    p=argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--urls',type=Path,required=True)
+    p.add_argument('--output',type=Path,required=True)
+    p.add_argument('--mapping',type=Path,required=True)
+    p.add_argument('--scope',action='append',required=True)
+    p.add_argument('--state',type=Path,default=Path('results/active_guard.sqlite3'))
+    p.add_argument('--cache',type=Path,default=Path('results/js_download_cache.jsonl'))
+    p.add_argument('--active',action='store_true')
+    args=p.parse_args()
+    if not args.active:
+        p.error('Target downloads require --active')
+    policy=NetworkPolicy(Scope(args.scope))
+    guard=RunGuard(args.state)
+    try:
+        # This counter is shared across all domains processed by this worker.
+        counter=args.state.with_suffix('.download-count')
+        used=int(counter.read_text()) if counter.exists() else 0
+        count=download(args.urls.read_text(encoding='utf-8').splitlines(),ProtectedHTTP(policy,guard),policy,args.output,args.mapping,args.cache,max_files=max(0,100-used))
+        private_write(counter,str(used+count))
+        print('Downloaded JS files: '+str(count))
+    except GuardStopped:
+        print('JS downloads stopped by overload protection; no automatic retry.')
+        return 3
+    finally:
+        guard.close()
+    return 0
 
-
-if __name__ == '__main__':
-    main()
+if __name__=='__main__':
+    raise SystemExit(main())

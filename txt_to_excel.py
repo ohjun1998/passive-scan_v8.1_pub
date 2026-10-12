@@ -6,8 +6,6 @@ import json
 import posixpath
 import sqlite3
 import shutil
-import asyncio
-import aiohttp
 import time
 from datetime import datetime
 from urllib.parse import urlparse, parse_qsl
@@ -15,13 +13,6 @@ from recon81.core import safe_url
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
-
-# === DuckDuckGo Dorking 모듈 라이브러리 교체 완료 ===
-try:
-    from duckduckgo_search import DDGS
-    HAS_DDG_SEARCH = True
-except ImportError:
-    HAS_DDG_SEARCH = False
 
 def escape_formula(value):
     if isinstance(value, str) and value.startswith(('=', '+', '-', '@')): return "'" + value
@@ -108,91 +99,9 @@ regex_sensitive_paths = re.compile(r'/(admin|administrator|wp-admin|manage|phpmy
 regex_credential_params = re.compile(r'(?:\?|&)(api_?key|token|jwt|auth|secret|password|pwd|access_?token)=([a-zA-Z0-9\-_\.]{8,})', re.IGNORECASE)
 regex_infra_paths = re.compile(r'/\.(git|svn|hg|aws|ssh|docker)($|/)', re.IGNORECASE)
 
-async def fetch_wayback_first_seen(session, subdomain):
-    url = f"https://web.archive.org/cdx/search/cdx?url={subdomain}/*&limit=1&fl=timestamp&output=json"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) PassiveRecon/1.0"}
-    for attempt in range(3):
-        try:
-            async with session.get(url, headers=headers, timeout=10) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if len(data) > 1 and len(data[1]) > 0:
-                        ts = data[1][0]
-                        return f"{ts[:4]}-{ts[4:6]}-{ts[6:8]}"
-                    else: return "기록 없음"
-                elif response.status in [429, 503]:
-                    await asyncio.sleep(2)
-                    continue
-                else: break
-        except Exception: await asyncio.sleep(1)
-    return "기록 없음"
-
-async def fetch_subdomain_status(session, subdomain):
-    try:
-        async with session.get(f"https://{subdomain}", timeout=5, allow_redirects=False) as resp: return str(resp.status)
-    except Exception:
-        try:
-            async with session.get(f"http://{subdomain}", timeout=5, allow_redirects=False) as resp: return str(resp.status)
-        except Exception: return "Dead"
-
-async def analyze_subdomain(session, subdomain):
-    wb_task = asyncio.create_task(fetch_wayback_first_seen(session, subdomain))
-    status_task = asyncio.create_task(fetch_subdomain_status(session, subdomain))
-    wb_date = await wb_task
-    status = await status_task
-    return subdomain, wb_date, status
-
-async def analyze_all_subdomains(subdomains):
-    results = {}
-    connector = aiohttp.TCPConnector(ssl=False, limit=50)
-    async with aiohttp.ClientSession(connector=connector) as session:
-        tasks = []
-        for sub in subdomains:
-            tasks.append(analyze_subdomain(session, sub))
-            if len(tasks) >= 20:
-                batch_results = await asyncio.gather(*tasks)
-                for sub, wb_date, status in batch_results: results[sub] = {"wayback": wb_date, "status": status}
-                tasks = []
-                await asyncio.sleep(1) 
-        if tasks:
-            batch_results = await asyncio.gather(*tasks)
-            for sub, wb_date, status in batch_results: results[sub] = {"wayback": wb_date, "status": status}
-    return results
-
 def run_duckduckgo_dorking(targets):
-    if not HAS_DDG_SEARCH:
-        print("[-] duckduckgo-search 패키지가 없어 Dorking을 건너뜁니다.")
-        return []
-
-    print(f"\n[*] 🦆 DuckDuckGo Dorking OSINT 엔진 가동 (대상: {len(targets)}개)")
-    results = []
-    for raw_target in targets:
-        base_domain = raw_target[2:] if raw_target.startswith('*.') else raw_target
-        dorks = [
-            f'site:{base_domain} ext:log OR ext:env OR ext:bak OR ext:sql OR ext:db',
-            f'site:{base_domain} inurl:admin OR inurl:swagger OR inurl:api_key OR inurl:graphql',
-            f'site:{base_domain} intitle:"index of"'
-        ]
-        for dork in dorks:
-            print(f"  [+] 검색 중: {dork}")
-            try:
-                with DDGS() as ddgs:
-                    for r in ddgs.text(dork, max_results=10):
-                        url = r.get('href')
-                        if not url: continue
-                        
-                        risk = "Low"
-                        if any(x in url.lower() for x in ['.log', '.env', '.sql', '.bak', '.db']): risk = "🚨 High (민감 파일)"
-                        elif "admin" in url.lower() or "swagger" in url.lower(): risk = "⚠️ Medium (관리자/API)"
-                        elif "index of" in dork: risk = "⚠️ Medium (디렉토리 리스팅)"
-
-                        results.append({"target": base_domain, "dork": dork, "url": url, "risk": risk})
-            except Exception as e:
-                print(f"  [-] DuckDuckGo 검색 에러: {e}")
-                time.sleep(2) 
-                continue 
-            time.sleep(3)
-    return results
+    # Reporting consumes saved data only. External searches belong to collection.
+    return []
 
 def add_secret_findings(wb, js_mapping):
     rows = []
@@ -234,6 +143,16 @@ def build_advanced_excel_report():
     cursor.execute('''CREATE TABLE IF NOT EXISTS target_stats (
         target TEXT PRIMARY KEY, passive_tot INTEGER DEFAULT 0, jsluice_tot INTEGER DEFAULT 0, katana_tot INTEGER DEFAULT 0 
     )''')
+    cursor.execute('CREATE TABLE IF NOT EXISTS js_cache (url_hash TEXT PRIMARY KEY, url TEXT NOT NULL, downloaded_at REAL NOT NULL)')
+    for cache_path in glob.glob('results/js_download_cache_*.jsonl'):
+        with open(cache_path, encoding='utf-8') as cache_stream:
+            for line in cache_stream:
+                try:
+                    item = json.loads(line)
+                    cursor.execute('INSERT INTO js_cache VALUES (?,?,?) ON CONFLICT(url_hash) DO UPDATE SET url=excluded.url, downloaded_at=MAX(js_cache.downloaded_at,excluded.downloaded_at)', (item['url_hash'], safe_url(item['url']), float(item['downloaded_at'])))
+                    cursor.execute('INSERT OR IGNORE INTO downloaded_js VALUES (?)', (safe_url(item['url']),))
+                except (ValueError, KeyError, TypeError):
+                    continue
     conn.commit()
 
     cursor.execute("SELECT target FROM target_stats")
@@ -263,7 +182,7 @@ def build_advanced_excel_report():
 
     for file_path in glob.glob('results/*.*'):
         filename = os.path.basename(file_path).lower()
-        match = re.match(r'^(.*)_(linkfinder|gau|waybackurls|katana)(?:_[0-9]{2})?\.txt$', filename)
+        match = re.match(r'^(.*)_(linkfinder|gau|waybackurls|katana|crawl)(?:_[0-9]{2})?\.txt$', filename)
         if not match: continue
 
         safe_domain = match.group(1)
@@ -278,6 +197,7 @@ def build_advanced_excel_report():
         elif 'waybackurls' in filename: source_tool = 'Waybackurls'
         elif 'gau' in filename: source_tool = 'GAU'
         elif 'katana' in filename: source_tool = 'Katana'
+        elif 'crawl' in filename: source_tool = 'Crawler'
         else: continue
 
         try:
@@ -379,7 +299,7 @@ def build_advanced_excel_report():
     # === [수정] 5개의 기능 분류 헤더 대시보드 반영 ===
     dash_headers = [
         "No", "타겟 도메인", "🌟 서브도메인 (누적/신규)", "📊 누적 / 🔥 신규 URL", 
-        "Katana 탐지", "jsluice (누적 / 신규)", "TruffleHog 탐지",
+        "크롤러 탐지", "jsluice (누적 / 신규)", "TruffleHog 탐지",
         "웹 서버 탐지", "기술 스택 탐지",
         "🔍 OSINT Dorks", "🚩 고가치 타겟",
         "🔑 인증(Auth)", "📦 객체(Object)", "📁 파일(File)", "💸 자금(Money)", "🛠️ 관리자(Admin)",
@@ -422,7 +342,7 @@ def build_advanced_excel_report():
         today_passive_count = len(url_map)
         domain_new_count = sum(1 for data in url_map.values() if data.get("is_new", False))
 
-        domain_katana_count = sum(1 for data in url_map.values() if 'Katana' in data["tools"])
+        domain_katana_count = sum(1 for data in url_map.values() if data["tools"] & {'Katana', 'Crawler'})
         today_jsluice_total = sum(1 for data in url_map.values() if 'LinkFinder' in data["tools"])
         jsluice_new = sum(1 for data in url_map.values() if 'LinkFinder' in data["tools"] and data.get("is_new", False))
         trufflehog_count = sum(1 for data in url_map.values() if 'TruffleHog' in data["tools"])
@@ -447,7 +367,7 @@ def build_advanced_excel_report():
 
         for url in url_map.keys():
             all_today_discovered_urls.append(url)
-            status = str(status_codes.get(url, 'Dead'))
+            status = str(status_codes.get(url, '미프로빙'))
             if status.startswith('2'): count_200 += 1
             elif status in ['401', '403']: count_40x += 1
             elif status.startswith('5'): count_50x += 1
@@ -537,7 +457,7 @@ def build_advanced_excel_report():
     for raw_target, url_map in matrix_data.items():
         for url, data in url_map.items():
             is_blacklist = any(b in url.lower() for b in blacklist_words)
-            current_status = "Skipped(위험)" if is_blacklist else ( "Static(생략)" if urlparse(url).path.lower().endswith(junk_extensions) else status_codes.get(url, 'Dead') )
+            current_status = "Skipped(위험)" if is_blacklist else ( "Static(생략)" if urlparse(url).path.lower().endswith(junk_extensions) else status_codes.get(url, '미프로빙') )
             is_new_subdomain = (urlparse(url).netloc in new_subdomains) if 'new_subdomains' in locals() else False
             sub_mark = "🌟 신규" if is_new_subdomain else "-"
             c_server, c_tech = server_info.get(url, '-'), tech_info.get(url, '-')
@@ -569,8 +489,8 @@ def build_advanced_excel_report():
 
     subdomain_analysis_results = {}
     if global_current_subdomains:
-        print(f"[*] 서브도메인 실시간 응답 상태 및 Wayback 연혁 분석 가동 (총 {len(global_current_subdomains)}개)...", flush=True)
-        subdomain_analysis_results = asyncio.run(analyze_all_subdomains(list(global_current_subdomains)))
+        print(f"[*] 저장된 응답 상태로 서브도메인 보고서 생성 (총 {len(global_current_subdomains)}개, 추가 요청 없음)...", flush=True)
+        subdomain_analysis_results = {sub: {'wayback': '미수집', 'status': status_codes.get('https://' + sub + '/', status_codes.get('http://' + sub + '/', '미수집'))} for sub in global_current_subdomains}
 
     # =========================================================================
     # 고위험 URL 후보 시트 생성
@@ -615,7 +535,7 @@ def build_advanced_excel_report():
         sorted_subs = sorted(list(global_current_subdomains), key=lambda x: (x not in global_new_subdomains, x))
         for sub in sorted_subs:
             is_new_mark = "🌟 신규" if sub in global_new_subdomains else "-"
-            analysis = subdomain_analysis_results.get(sub, {"wayback": "기록 없음", "status": "Dead"})
+            analysis = subdomain_analysis_results.get(sub, {"wayback": "기록 없음", "status": "미수집"})
             first_seen, status = analysis["wayback"], analysis["status"]
             ws_subs.append([sub_idx - 1, status, escape_formula(sub), first_seen, is_new_mark])
             for c in range(1, 6):
@@ -681,7 +601,7 @@ def build_advanced_excel_report():
         sorted_urls = sorted(url_map.items(), key=lambda x: (
             get_function_priority(get_function_category(x[0])), # 1순위: 기능
             not x[1].get("is_new", False),                      # 2순위: 신규 여부
-            get_status_priority(status_codes.get(x[0], 'Dead') if any(b not in x[0].lower() for b in blacklist_words) else 'Skipped(위험)'), # 3순위: 응답 상태
+            get_status_priority(status_codes.get(x[0], '미프로빙') if any(b not in x[0].lower() for b in blacklist_words) else 'Skipped(위험)'), # 3순위: 응답 상태
             x[0]
         ))
 
@@ -695,7 +615,7 @@ def build_advanced_excel_report():
                 parsed_pm = urlparse(url)
                 postman_folder["item"].append({"name": parsed_pm.path if parsed_pm.path else "/", "request": {"method": "UNKNOWN", "header": [], "url": {"raw": url, "protocol": parsed_pm.scheme, "host": parsed_pm.netloc.split('.'), "path": [p for p in parsed_pm.path.split('/') if p], "query": [{"key": k, "value": v} for k, v in parse_qsl(parsed_pm.query, keep_blank_values=True)]}}})
 
-            current_status = "Skipped(위험)" if is_blacklist else ( "Static(생략)" if urlparse(url).path.lower().endswith(junk_extensions) else status_codes.get(url, 'Dead') )
+            current_status = "Skipped(위험)" if is_blacklist else ( "Static(생략)" if urlparse(url).path.lower().endswith(junk_extensions) else status_codes.get(url, '미프로빙') )
             is_new_subdomain = (urlparse(url).netloc in new_subdomains) and bool(previous_subdomains)
             sub_mark = "🌟 신규" if is_new_subdomain else "-"
             c_server, c_tech = server_info.get(url, '-'), tech_info.get(url, '-')
@@ -776,7 +696,7 @@ def build_advanced_excel_report():
             elif header in ["🚨 탐지 사유 / 위험도", "🌐 서브도메인 (Subdomain)"]: sheet.column_dimensions[col_letter].width = 55  
             elif header in ["📊 누적 / 🔥 신규 URL", "jsluice (누적 / 신규)", "🌟 서브도메인 (누적/신규)", "📅 최초 발견일 (Wayback)", "🏢 타겟 도메인", "⚙️ 기능(Function)"]: sheet.column_dimensions[col_letter].width = 28
             elif header in ["🛠️ 기술 스택", "🌐 웹 서버", "기술 스택 탐지", "웹 서버 탐지", "📂 소스 출처"]: sheet.column_dimensions[col_letter].width = 25
-            elif header in ["📡 응답 상태", "🔥 신규여부", "🌟 신규 서브", "🔍 OSINT Dorks", "🚩 고가치 타겟", "Katana 탐지", "🚨 위험도"]: sheet.column_dimensions[col_letter].width = 18
+            elif header in ["📡 응답 상태", "🔥 신규여부", "🌟 신규 서브", "🔍 OSINT Dorks", "🚩 고가치 타겟", "크롤러 탐지", "🚨 위험도"]: sheet.column_dimensions[col_letter].width = 18
             # === [수정] 5개의 기능 분류 컬럼 너비 설정 ===
             elif header in ["🔑 인증(Auth)", "📦 객체(Object)", "📁 파일(File)", "💸 자금(Money)", "🛠️ 관리자(Admin)"]: sheet.column_dimensions[col_letter].width = 15
             else: sheet.column_dimensions[col_letter].width = 18

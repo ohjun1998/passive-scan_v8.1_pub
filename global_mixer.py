@@ -5,6 +5,8 @@ import re
 import random
 import posixpath
 from urllib.parse import urlparse, parse_qsl
+from recon81.network_policy import NetworkPolicy
+from recon81.core import Scope
 
 def make_absolute(url, domain):
     if url.startswith('http://') or url.startswith('https://'): return url
@@ -28,6 +30,7 @@ def run_mixer():
     with open('targets.txt', 'r') as f:
         targets = [line.strip() for line in f if line.strip()]
 
+    policy = NetworkPolicy(Scope(targets))
     target_map = {get_safe_domain(t): t for t in targets}
 
     js_url_converter = {}
@@ -46,7 +49,7 @@ def run_mixer():
     for file_path in txt_files:
         if not os.path.isfile(file_path): continue
         filename = os.path.basename(file_path).lower()
-        match = re.match(r'^(.*)_(linkfinder|gau|waybackurls|katana)(?:_[0-9]{2})?\.txt$', filename)
+        match = re.match(r'^(.*)_(linkfinder|gau|waybackurls|katana|crawl)(?:_[0-9]{2})?\.txt$', filename)
         if not match: continue
         
         safe_domain = match.group(1)
@@ -99,6 +102,7 @@ def run_mixer():
     signature_counts = {}
     
     for u in all_urls:
+        if policy.reason(u): continue
         parsed = urlparse(u)
         
         if parsed.path.lower().endswith(junk_exts): continue

@@ -1,4 +1,2 @@
 openpyxl>=3.1,<4
-aiohttp>=3.10,<4
-# Optional live browser recording: pip install playwright
-# Then: python -m playwright install chromium
+# Optional browser recording/screenshots: pip install -r requirements-browser.txt

@@ -4,6 +4,8 @@ URL 목록과 실제 HTTP 요청/응답을 함께 관리하는 버그바운티 �
 
 원본 `ohjun1998/passive-scan_v8_pub`의 커밋 `56fe674eff848ba516dc1a743879e43c7cd3a12b`를 복사해 만든 별도 프로젝트입니다. 원본 저장소를 수정하거나 원본에서 스캔을 실행하지 않습니다.
 
+현재 버전은 **8.1.1**입니다. 크롤링·JS 분석·브라우저 렌더링·수동 POST body 수집을 유지하면서 중복 요청과 과부하 시 계속되는 요청을 줄였습니다. 요청하신 **httpx 20개 워커, 각각 `-rl 10 -t 5`는 그대로**입니다. 판단 근거, 전체 실행 흐름과 제한은 [가용성·기능성 운영 안내](docs/AVAILABILITY.md)에 정리했습니다.
+
 ## v8.1에서 달라진 점
 
 | 기능 | 처리 방식 |
@@ -131,8 +133,13 @@ Postman 컬렉션은 collection-level pre-request script로 실행을 차단합�
 
 ## GitHub Actions
 
-- `v81_ci.yml`: push/PR 시 단위 테스트와 가상 데이터 보고서 생성만 수행합니다. 대상 스캔은 없습니다.
-- `passive_recon.yml`: 기존 URL 발굴 + JS 구조 보존 + v8.1 인벤토리/보고서 통합. **수동 실행**만 가능합니다.
+- `v81_ci.yml`: push/PR 시 단위 테스트·가상 보고서와 로컬 서버에 대한 Chromium 검증을 수행합니다. 실제 대상 스캔은 없습니다.
+- `passive_recon.yml`: URL 발굴 + JS 구조 보존 + 인벤토리/보고서 통합. **수동 실행**만 가능합니다.
+- `balanced`(기본): 크롤링·JS 다운로드·httpx·스크린샷을 선택적으로 실행합니다. 기본 선택은 모두 켜져 있으며 각 항목을 끌 수 있습니다.
+- `passive`: Subfinder·Wayback·GAU 등 외부 제공자 조회만 수행하고 대상 프로빙·크롤링·JS 다운로드·스크린샷은 생략합니다.
+- `offline`: 가상 데이터 가져오기와 보고서 검증만 수행하며 대상 Secrets가 필요하지 않습니다.
+- 중복 실행은 대기시키고, 429/503·연속 오류·같은 호스트의 지속적인 지연 증가가 관찰되면 해당 수집기를 중단합니다. 자동 재시도·재개·스크린샷 재촬영은 없습니다.
+- 보고서 생성 중 추가 대상 요청은 없습니다. 미수집 상태를 대상 장애로 단정하지 않습니다.
 - 새 저장소에 `TARGET_DOMAINS`, `ACTIONS_CRYPTO_PASSWORD`를 별도로 등록해야 합니다. 원본 저장소의 Secrets는 자동 복사되지 않습니다.
 - `GEMINI_API_KEY`는 사용하지 않습니다.
 - Discord 전송은 기본 비활성입니다. 필요한 경우 저장소 변수 `ENABLE_DISCORD_DELIVERY=true`와 `DISCORD_WEBHOOK_URL`을 직접 설정합니다.
@@ -148,17 +155,13 @@ python -m compileall -q .
 
 의존성 설치 외의 테스트·예제 import/report는 실제 대상에 요청을 보내지 않습니다. Playwright 라이브러리/브라우저와 Go 수집 도구는 별도 설치가 필요합니다.
 
-## 새 저장소로 게시
-
-소스 묶음을 GitHub에 게시할 때는 **v8.1 새 저장소만** 사용하세요. GitHub CLI가 설치되고 인증되어 있는 환경에서는 다음 명령으로 새 공개 저장소를 생성할 수 있습니다.
+## 소스 받기
 
 ```bash
-git init -b main
-git add .
-git commit -m "feat: passive scan v8.1 request and body inventory"
-gh repo create ohjun1998/passive-scan_v8.1_pub --public --source . --remote origin --push
+git clone https://github.com/ohjun1998/passive-scan_v8.1_pub.git
+cd passive-scan_v8.1_pub
 ```
 
-동일 이름의 저장소가 이미 있다면 덮어쓰지 말고 내용을 확인하세요. 기존 `passive-scan_v8_pub`을 remote로 지정하지 마세요.
+기존 `passive-scan_v8_pub`을 수정용 remote로 지정하지 마세요.
 
 참고 문서: [Burp Save items](https://portswigger.net/burp/documentation/desktop/tools/message-editor), [Playwright Request](https://playwright.dev/python/docs/api/class-request), [jsluice](https://github.com/BishopFox/jsluice).
