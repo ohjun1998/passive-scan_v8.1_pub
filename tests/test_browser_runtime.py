@@ -1,5 +1,6 @@
 """Optional Chromium integration against a loopback-only fixture server."""
 import json
+import faulthandler
 import os
 import tempfile
 import threading
@@ -14,6 +15,7 @@ from safe_screenshots import BrowserGate, configure_context
 @unittest.skipUnless(os.environ.get('RUN_BROWSER_TESTS')=='1', 'Enable RUN_BROWSER_TESTS with installed Chromium')
 class BrowserRuntimeTests(unittest.TestCase):
     def test_js_read_query_preserved_and_unsafe_requests_never_reach_server(self):
+        faulthandler.dump_traceback_later(30,exit=True)
         from playwright.sync_api import sync_playwright
         hits=[]
         class Handler(BaseHTTPRequestHandler):
@@ -63,4 +65,5 @@ class BrowserRuntimeTests(unittest.TestCase):
                 finally: guard.close()
         finally:
             server.shutdown(); server.server_close(); worker.join(timeout=2)
+            faulthandler.cancel_dump_traceback_later()
 
