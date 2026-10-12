@@ -2,8 +2,9 @@
 """Build the v8.1 inventory from existing recon results; never makes network calls."""
 import argparse
 import glob
+import json
 from pathlib import Path
-from recon81.core import Inventory, Scope
+from recon81.core import Inventory, Scope, normalize_record
 from recon81.importers import load_records
 from recon81.reports import generate
 
@@ -36,6 +37,23 @@ def main():
                         count += 1
                     else:
                         skipped += 1
+        inventory.conn.commit()
+        # Saved httpx output proves a GET was attempted; no response body is invented.
+        for path in sorted(args.results.glob('httpx_results_*.json')):
+            for line in path.read_text(encoding='utf-8').splitlines():
+                if not line.strip(): continue
+                item=json.loads(line); url=item.get('url') or item.get('input')
+                if not url or not scope.allows(url): skipped+=1; continue
+                headers=item.get('header') or item.get('headers') or item.get('response_headers') or {}
+                if not isinstance(headers,dict): headers={}
+                r=normalize_record(url,'GET',body=b'',response={'status':item.get('status_code',0),'headers':headers,'body':None},source='httpx')
+                inventory.add(r); count+=1
+        for path in sorted(args.results.glob('httpx_results_*.deferred.txt')):
+            for r in load_records(path,fmt='urls'):
+                if scope.allows(r['url']):
+                    r['source']='httpx_deferred'
+                    from recon81.importers import reidentify
+                    inventory.add(reidentify(r)); count+=1
         inventory.conn.commit()
         generate([r for r in inventory.records() if scope.allows(r['url'])], args.output, args.xlsx)
     print('v8.1 inventory: imported=' + str(count) + ', out_of_scope=' + str(skipped) + ', network_requests_sent=0')

@@ -20,7 +20,14 @@ def main():
         conn=sqlite3.connect('file:'+str(args.db)+'?mode=ro',uri=True)
         try:
             if conn.execute("SELECT 1 FROM sqlite_master WHERE name='js_cache'").fetchone():
-                rows=[{'url_hash':k,'url':u,'downloaded_at':t} for k,u,t in conn.execute('SELECT url_hash,url,downloaded_at FROM js_cache') if not policy.reason(u)]
+                has_metadata='metadata' in {x[1] for x in conn.execute('PRAGMA table_info(js_cache)')}
+                from recon81.assets import sanitize_entry
+                for k,u,t,metadata in conn.execute('SELECT url_hash,url,downloaded_at,'+('metadata' if has_metadata else "'{}'")+' FROM js_cache'):
+                    if policy.reason(u): continue
+                    try:
+                        value=json.loads(metadata or '{}'); value.update(url_hash=k,url=u,downloaded_at=t)
+                        rows.append(sanitize_entry(value))
+                    except (ValueError,KeyError,TypeError): continue
         finally: conn.close()
     private_write(args.output,''.join(json.dumps(r,ensure_ascii=False)+'\n' for r in rows))
 

@@ -2,6 +2,7 @@
 """Record scoped requests during manual browser use. Does not auto-click or replay."""
 import argparse
 import time
+import uuid
 from pathlib import Path
 from recon81.core import MAX_BODY, Inventory, Scope, get_header, normalize_record
 
@@ -30,7 +31,12 @@ def main():
     parser.add_argument('--db', type=Path, default=Path('reports/request_inventory.sqlite3'))
     parser.add_argument('--seconds', type=int, default=300)
     parser.add_argument('--include-text', action='store_true')
+    from request_inventory import label_args, labels
+    label_args(parser)
     args = parser.parse_args()
+    from recon81.context import attach_context
+    capture_context=labels(args)
+    capture_context.setdefault('capture_id',uuid.uuid4().hex)
     scope = Scope(args.scope)
     if not scope.allows(args.url):
         parser.error('Initial URL must match scope')
@@ -54,7 +60,7 @@ def main():
                 return
             pending.remove(request)
             try:
-                inventory.add(record_request(request, response, args.include_text))
+                inventory.add(attach_context(record_request(request, response, args.include_text),capture_context))
                 count += 1
             except Exception:
                 failed += 1  # Never print raw URL or exception data.

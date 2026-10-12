@@ -9,37 +9,7 @@ from urllib.parse import urlsplit, urljoin
 from recon81.core import private_write
 from recon81.guard import RunGuard, ProtectedHTTP, GuardStopped
 from recon81.network_policy import NetworkPolicy, scope_from_file
-
-
-def read_only_graphql(data):
-    if not data or len(data)>8192:
-        return False
-    try:
-        payload=json.loads(data)
-        if not isinstance(payload,dict): return False
-        query=payload.get('query','').strip()
-        import re
-        query=re.sub(r'#[^\n]*','',query).strip()
-        if not (query.startswith('query ') or query.startswith('query{') or query.startswith('{')):
-            return False
-        if re.search(r'\b(mutation|subscription)\b',query): return False
-        for size in re.findall(r'\b(?:limit|pageSize|page_size|first|last|count)\s*:\s*(-?\d+)',query):
-            if not 0<=int(size)<=100: return False
-        depth=maximum=0
-        for char in query:
-            if char=='{': depth+=1; maximum=max(maximum,depth)
-            if char=='}': depth-=1
-        if maximum>10 or depth!=0: return False
-        def bounded(value):
-            if isinstance(value,dict):
-                for k,v in value.items():
-                    if k.lower() in ('limit','pagesize','page_size','first','last','count') and (not isinstance(v,int) or not 0<=v<=100): return False
-                    if not bounded(v): return False
-            elif isinstance(value,list): return len(value)<=100 and all(bounded(x) for x in value)
-            return True
-        return bounded(payload.get('variables',{}))
-    except (ValueError,TypeError,AttributeError):
-        return False
+from recon81.graphql_policy import read_only_graphql
 
 
 def select_pages(urls, policy, max_pages=30, per_host=2):

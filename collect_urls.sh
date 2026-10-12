@@ -4,6 +4,10 @@ GROUP=${1:-00}
 [[ "$GROUP" =~ ^[0-9]{2}$ ]] || exit 2
 [[ -f targets.txt && -f scope.txt ]] || { echo 'targets.txt and scope.txt are required'; exit 2; }
 mkdir -p results
+if [[ "${ENABLE_JS_DOWNLOAD:-false}" == true ]]; then
+  export JS_ANALYZER_VERSION
+  JS_ANALYZER_VERSION=$(python3 js_asset_cache.py version --binary "$(command -v jsluice)")
+fi
 # Tagged hosts are validated and grouped before invoking external tools.
 python3 - <<'PY'
 from pathlib import Path
@@ -41,6 +45,6 @@ for u in sorted(set(x.strip() for x in sys.stdin if x.strip())):
     [[ "$js_scope" != wild_* ]] || js_scope="*.${js_scope#wild_}"
     python3 download_js.py --active --urls "results/${domain}_js_targets.txt" \
       --output "results/${domain}_js_files_${GROUP}" --mapping "results/${domain}_js_mapping.txt" \
-      --scope "$js_scope" --state results/active_guard.sqlite3 --cache "results/js_download_cache_${GROUP}.jsonl"
+      --scope "$js_scope" --state results/active_guard.sqlite3 --cache "results/js_download_cache_${GROUP}.jsonl" --analyzer-version "$JS_ANALYZER_VERSION"
   fi
 done

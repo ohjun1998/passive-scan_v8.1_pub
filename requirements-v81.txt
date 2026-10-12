@@ -1,2 +1,4 @@
 openpyxl>=3.1,<4
+graphql-core>=3.2.6,<3.3
+PyYAML>=6.0.2,<7
 # Optional browser recording/screenshots: pip install -r requirements-browser.txt

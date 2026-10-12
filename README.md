@@ -1,10 +1,26 @@
-# Passive Scan v8.1
+# Passive Scan v8.2
 
 URL 목록과 실제 HTTP 요청/응답을 함께 관리하는 버그바운티 정찰 도구입니다.
 
 원본 `ohjun1998/passive-scan_v8_pub`의 커밋 `56fe674eff848ba516dc1a743879e43c7cd3a12b`를 복사해 만든 별도 프로젝트입니다. 원본 저장소를 수정하거나 원본에서 스캔을 실행하지 않습니다.
 
-현재 버전은 **8.1.1**입니다. 크롤링·JS 분석·브라우저 렌더링·수동 POST body 수집을 유지하면서 중복 요청과 과부하 시 계속되는 요청을 줄였습니다. 요청하신 **httpx 20개 워커, 각각 `-rl 10 -t 5`는 그대로**입니다. 판단 근거, 전체 실행 흐름과 제한은 [가용성·기능성 운영 안내](docs/AVAILABILITY.md)에 정리했습니다.
+현재 버전은 **8.2.0**입니다. 계정·조직·기능 라벨, 증거 기반 후보 우선순위, 계정별 응답 비교, 기능 흐름과 진단 커버리지 대시보드를 추가했습니다. JS 변경분과 저장된 OpenAPI/HTML form도 분석합니다. 수집과 분석 기능, **httpx 20개 워커, 각각 `-rl 10 -t 5`**는 유지합니다.
+
+[v8.2 사용법과 제한](docs/V82.md) · [신규·개선·유지 유스케이스 다이어그램](docs/USE_CASES.md) · [가용성·기능성 운영 안내](docs/AVAILABILITY.md)
+
+## v8.2에서 달라진 점
+
+| 기능 | 처리 방식 |
+|---|---|
+| 계정·기능 라벨 | 마스킹된 세션과 별도로 계정·조직·기능·기대 권한 보존 |
+| 후보 우선순위 | 실제 필드·응답·기능 맥락의 근거와 부족한 정보 제시 |
+| 계정 비교 | 동일 자원·메소드·payload의 계정별 응답 차이 표시 |
+| 커버리지·흐름 | 미수집/미검토 구분, 업로드→조회 같은 값 연결 추정 |
+| 검토 상태 | 증거 메모와 함께 상태 변경·JSON 내보내기/DB 반영 |
+| JS·명세 분석 | 해시/분석기 버전 캐시, 변경 endpoint, OpenAPI/HTML form 필드 |
+| 선택적 조회 baseline | CLI에서 명시적으로 고른 실제 요청만 별도 예산으로 조회 |
+
+후보 점수와 응답 차이는 취약점 판정이 아닙니다. 분석·가져오기·보고서는 대상 추가 요청 없이 수행됩니다. 조회 baseline은 `--active`와 선택한 ID가 있어야 실행됩니다.
 
 ## v8.1에서 달라진 점
 
@@ -22,7 +38,7 @@ URL 목록과 실제 HTTP 요청/응답을 함께 관리하는 버그바운티 �
 
 **URL만 발견한 경우 메소드는 UNKNOWN입니다. JS에서 발견한 필드명은 실제 body 값으로 표시하지 않습니다.**
 
-기존 URL 발굴 작업에는 네트워크 요청이 발생합니다. Katana 크롤링, httpx GET 프로빙, JS 다운로드, 스크린샷은 대상에 접속합니다. `request_inventory.py`의 import/report 작업은 로컬 파일만 처리합니다. 수집한 POST·PUT·PATCH·DELETE 요청을 자동 재전송하는 기능은 없습니다.
+기존 URL 발굴 작업에는 네트워크 요청이 발생합니다. Katana 크롤링, httpx GET 프로빙, JS 다운로드, 스크린샷은 대상에 접속합니다. `request_inventory.py`의 import/report 작업은 로컬 파일만 처리합니다. 기본 수집 파이프라인은 기록한 요청을 재전송하지 않습니다. 별도 `review_queue.py`는 명시적으로 선택한 GET/HEAD 또는 검토한 조회 POST만 실행합니다.
 
 ## 설치와 빠른 확인
 
@@ -30,7 +46,7 @@ Python 3.10 이상이 필요합니다. Windows에서도 오프라인 가져오�
 
 ```bash
 python -m pip install -r requirements-v81.txt
-python request_inventory.py import examples/demo.har examples/demo-js.jsonl --scope example.test
+python request_inventory.py import examples/v82-demo.jsonl --scope example.test
 python request_inventory.py report --xlsx
 ```
 
@@ -74,7 +90,7 @@ python request_inventory.py report --xlsx
 ## 3. Playwright로 직접 사용한 기능 기록하기
 
 ```bash
-python -m pip install playwright
+python -m pip install -r requirements-browser.txt
 python -m playwright install chromium
 python record_browser.py --url https://example.com --scope example.com --scope api.example.com --seconds 300
 python request_inventory.py report --xlsx
@@ -117,7 +133,7 @@ jsluice 원본 JSONL에는 JS에 들어 있는 비밀값이 포함될 수 있으
 
 `observed=true`는 실제 요청에서 확보한 기록입니다. `observed=false`는 URL 목록이나 JS의 정적 추출 결과입니다. `body.complete`는 body 수집/표현의 완전성을 나타내며 마스킹 여부와 별개입니다. 요청·응답은 정규화되므로 원본 패킷 바이트와 다릅니다. 압축 헤더·길이 헤더는 정규화된 패킷에서 제거합니다.
 
-`structure_id`는 요청 구조를 묶습니다. `request_id`는 마스킹 후 URL·메소드·헤더·body의 값 변형을 구분합니다. `observation_id`는 응답·출처까지 구분합니다. 서로 다른 인증 토큰 자체는 마스킹되어 동일값으로 취급할 수 있으므로 이 도구만으로 사용자별 세션을 구분하지 않습니다. 응답 차이는 별도 기록으로 남깁니다.
+`structure_id`는 요청 구조를 묶습니다. `request_id`는 마스킹 후 URL·메소드·헤더·body의 값 변형을 구분합니다. `observation_id`는 응답·출처까지 구분합니다. 서로 다른 인증 토큰 자체는 동일한 마스킹 값이 될 수 있으므로 `--actor`·`--tenant` 라벨로 구분합니다. 라벨은 사용자가 제공한 맥락이며 실제 로그인 계정을 자동 인증하지 않습니다. 응답 차이는 별도 기록으로 남깁니다.
 
 Postman 컬렉션은 collection-level pre-request script로 실행을 차단합니다. 실제 요청을 보내려면 복사본에서 차단 스크립트를 직접 제거하고 세션·body·scope를 검토해야 합니다. UNKNOWN 메소드는 실제 메소드를 확인한 뒤 바꾸세요. multipart 파일 바이트는 포함되지 않습니다.
 

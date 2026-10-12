@@ -144,12 +144,15 @@ def build_advanced_excel_report():
         target TEXT PRIMARY KEY, passive_tot INTEGER DEFAULT 0, jsluice_tot INTEGER DEFAULT 0, katana_tot INTEGER DEFAULT 0 
     )''')
     cursor.execute('CREATE TABLE IF NOT EXISTS js_cache (url_hash TEXT PRIMARY KEY, url TEXT NOT NULL, downloaded_at REAL NOT NULL)')
+    if 'metadata' not in {row[1] for row in cursor.execute('PRAGMA table_info(js_cache)')}:
+        cursor.execute("ALTER TABLE js_cache ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'")
+    from recon81.assets import sanitize_entry
     for cache_path in glob.glob('results/js_download_cache_*.jsonl'):
         with open(cache_path, encoding='utf-8') as cache_stream:
             for line in cache_stream:
                 try:
-                    item = json.loads(line)
-                    cursor.execute('INSERT INTO js_cache VALUES (?,?,?) ON CONFLICT(url_hash) DO UPDATE SET url=excluded.url, downloaded_at=MAX(js_cache.downloaded_at,excluded.downloaded_at)', (item['url_hash'], safe_url(item['url']), float(item['downloaded_at'])))
+                    item = sanitize_entry(json.loads(line))
+                    cursor.execute('INSERT INTO js_cache(url_hash,url,downloaded_at,metadata) VALUES (?,?,?,?) ON CONFLICT(url_hash) DO UPDATE SET url=excluded.url,downloaded_at=excluded.downloaded_at,metadata=excluded.metadata WHERE excluded.downloaded_at>=js_cache.downloaded_at', (item['url_hash'], safe_url(item['url']), float(item['downloaded_at']),json.dumps(item,ensure_ascii=False)))
                     cursor.execute('INSERT OR IGNORE INTO downloaded_js VALUES (?)', (safe_url(item['url']),))
                 except (ValueError, KeyError, TypeError):
                     continue
@@ -703,11 +706,15 @@ def build_advanced_excel_report():
 
     ws_dash.column_dimensions['B'].width = 35
     from recon81.core import Inventory, Scope
-    from recon81.reports import add_excel_sheets
+    from recon81.reports import add_excel_sheets,add_analysis_sheets
+    from recon81.analysis import analyze
     if os.path.isfile('reports/request_inventory.sqlite3'):
         with Inventory('reports/request_inventory.sqlite3') as inventory:
             scope = Scope(targets)
-            add_excel_sheets(wb, [r for r in inventory.records() if scope.allows(r['url'])])
+            records=[r for r in inventory.records() if scope.allows(r['url'])]
+            add_excel_sheets(wb,records)
+            enriched,analysis=analyze(records)
+            add_analysis_sheets(wb,enriched,analysis)
     add_secret_findings(wb, js_url_converter)
     wb.save(f'reports/passive_recon_report_{now_str}.xlsx')
     with open(f'reports/postman_collection_{now_str}.json', 'w', encoding='utf-8') as f: json.dump(postman_collection, f, indent=4, ensure_ascii=False)
