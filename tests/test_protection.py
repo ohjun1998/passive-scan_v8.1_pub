@@ -159,6 +159,24 @@ class ProtectionTests(unittest.TestCase):
         self.assertTrue(result['complete'])
         response.read.assert_not_called()
 
+    def test_trickle_response_cannot_extend_transfer_indefinitely(self):
+        clock=[0]
+        class Trickle(io.BytesIO):
+            status=200
+            headers={}
+            def read1(self,size):
+                clock[0]+=1
+                return super().read(1)
+        response=Trickle(b'abcdef')
+        client=ProtectedHTTP(self.policy,self.guard,timeout=2)
+        client.opener=Mock(); client.opener.open.return_value=response
+        with patch('recon81.guard.time.monotonic',side_effect=lambda:clock[0]):
+            result=client.get('https://example.test/profile')
+        self.assertFalse(result['complete'])
+        self.assertEqual(b'',result['body'])
+        self.assertTrue(response.closed)
+        self.assertEqual(1,self.guard.state()['hosts']['example.test']['failures'])
+
     def test_crawl_preserves_links_without_requesting_mutation(self):
         client=Mock()
         client.get.return_value={'status':200,'headers':{'Content-Type':'text/html'},'body':b'<a href="/delete/1">bad</a><a href="/profile">good</a><script src="/main.js"></script>','complete':True}
