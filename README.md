@@ -87,7 +87,7 @@ python request_inventory.py report --xlsx
 기존 파이프라인에서 `scan_linkfinder.sh`가 jsluice 결과를 JSONL로 보존합니다.
 
 ```bash
-./scan_linkfinder.sh 00
+bash scan_linkfinder.sh 00
 python collect_request_inventory.py --scope-file targets.txt --xlsx
 ```
 
