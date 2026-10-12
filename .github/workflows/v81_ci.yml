@@ -1,4 +1,4 @@
-name: v8.1 offline verification
+name: v8.2 offline verification
 on:
   push:
     branches: [main]
@@ -27,7 +27,9 @@ jobs:
       - name: Demo imports and reports
         run: |
           python request_inventory.py import examples/demo.har examples/demo-js.jsonl --scope example.test
+          python request_inventory.py import examples/v82-demo.jsonl --scope example.test
           python request_inventory.py report --xlsx
+          python review_queue.py build --scope-file examples/scope.txt
   browser-fixture:
     runs-on: ubuntu-latest
     timeout-minutes: 10

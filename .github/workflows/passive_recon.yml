@@ -1,4 +1,4 @@
-name: Passive Scan v8.1 · balanced recon
+name: Passive Scan v8.2 · balanced recon
 on:
   workflow_dispatch:
     inputs:
