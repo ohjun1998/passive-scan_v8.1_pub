@@ -18,7 +18,7 @@
 
 실제 대상의 정찰·취약점 테스트·POST 재전송·Discord 전송은 수행하지 않았습니다. Playwright 브라우저 실행과 실제 브라우저에서의 HTML 렌더링은 이 환경에 Chromium이 설치되어 있지 않아 검증하지 못했습니다. Go 수집 도구의 실제 원격 실행과 GitHub Actions의 실행 결과도 이 로컬 검증 범위에 포함되지 않습니다.
 
-CI에는 Python 3.10/3.12/3.13 검증을 설정했습니다. 이 기록에서 해당 원격 CI가 이미 통과했다고 주장하지 않습니다.
+GitHub Actions에서도 Python 3.10/3.12/3.13의 단위·통합 테스트와 예제 import/report가 모두 성공했습니다. 원격 실행 기록: https://github.com/ohjun1998/passive-scan_v8.1_pub/actions/runs/38219835792
 
 원본 `passive-scan_v8_pub`의 main은 작업 전후 같은 커밋 `56fe674eff848ba516dc1a743879e43c7cd3a12b`였으며 원본에 쓰기 작업을 수행하지 않았습니다.
 
