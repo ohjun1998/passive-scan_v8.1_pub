@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+.venv/
+targets.txt
+scope.txt
+imports/
+results/
+reports/
+previous_report/
+chunks/
+balanced_targets/
+encrypted*/
+*.db
+*.sqlite3
+*.har
+global_js_db.txt
+storage_state*.json
+browser_profile/
+
+# Deliberately synthetic test fixtures.
+!examples/*.har
+!examples/scope.txt

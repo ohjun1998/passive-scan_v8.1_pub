@@ -1,2 +1,164 @@
-# passive-scan_v8.1_pub
-Passive Scan v8.1: URL reconnaissance, Burp/HAR request-body inventory, JS request metadata, and local evidence reports.
+# Passive Scan v8.1
+
+URL 목록과 실제 HTTP 요청/응답을 함께 관리하는 버그바운티 정찰 도구입니다.
+
+원본 `ohjun1998/passive-scan_v8_pub`의 커밋 `56fe674eff848ba516dc1a743879e43c7cd3a12b`를 복사해 만든 별도 프로젝트입니다. 원본 저장소를 수정하거나 원본에서 스캔을 실행하지 않습니다.
+
+## v8.1에서 달라진 점
+
+| 기능 | 처리 방식 |
+|---|---|
+| Burp XML 가져오기 | Save items XML의 URL·메소드·헤더·body·응답을 수집 |
+| HAR 가져오기 | 브라우저가 기록한 실제 요청 body와 응답 수집 |
+| 브라우저 기록 | Playwright 창에서 사용자가 직접 실행한 기능의 트래픽을 기록 |
+| JS 분석 | jsluice의 method·headers·bodyParams와 JS 출처 보존 |
+| body 파싱 | JSON·배열·폼·XML/SOAP·multipart 지원 |
+| 중복 관리 | 메소드·전체 경로·query 필드·body 필드로 구조를 묶고 실제 값 변형·응답 변형을 별도로 보존 |
+| 보고서 | 검색 가능한 단일 HTML, JSONL, 증거 JSON, Excel, 검토 전용 Postman |
+| 비밀정보 | Authorization·Cookie·비밀번호·토큰·API 키 등 저장 전 마스킹 |
+| 외부 AI 호출 | 제거. 요청/응답 데이터를 LLM으로 전송하지 않음 |
+
+**URL만 발견한 경우 메소드는 UNKNOWN입니다. JS에서 발견한 필드명은 실제 body 값으로 표시하지 않습니다.**
+
+기존 URL 발굴 작업에는 네트워크 요청이 발생합니다. Katana 크롤링, httpx GET 프로빙, JS 다운로드, 스크린샷은 대상에 접속합니다. `request_inventory.py`의 import/report 작업은 로컬 파일만 처리합니다. 수집한 POST·PUT·PATCH·DELETE 요청을 자동 재전송하는 기능은 없습니다.
+
+## 설치와 빠른 확인
+
+Python 3.10 이상이 필요합니다. Windows에서도 오프라인 가져오기·보고서 기능을 사용할 수 있습니다. 기존 Bash 정찰 스크립트는 Linux/WSL/GitHub Actions에서 실행합니다.
+
+```bash
+python -m pip install -r requirements-v81.txt
+python request_inventory.py import examples/demo.har examples/demo-js.jsonl --scope example.test
+python request_inventory.py report --xlsx
+```
+
+`reports/requests/index.html`을 브라우저에서 열면 메소드·출처·관찰 상태별 필터와 body 값 검색을 사용할 수 있습니다. 테이블에서 요청을 선택하면 요청/응답 내용을 확인할 수 있습니다. 예제는 가상의 `example.test` 트래픽이고 실제 접속은 없습니다.
+
+## 1. Burp의 실제 요청/응답 가져오기 — 권장
+
+1. Burp 브라우저에서 테스트 계정으로 로그인하고 대상 기능을 직접 사용합니다.
+2. HTTP history에서 범위 내 항목을 선택합니다.
+3. 우클릭 → **Save items**로 XML을 저장합니다. 가능하면 요청/응답 Base64 인코딩을 선택합니다.
+4. 파일을 `imports/burp.xml`처럼 저장한 뒤 가져옵니다. `imports/`는 Git에 포함되지 않습니다.
+
+```bash
+python request_inventory.py import imports/burp.xml --scope example.com
+python request_inventory.py report --xlsx
+```
+
+여러 출처 파일은 한 번에 통합할 수 있습니다.
+
+```bash
+python request_inventory.py import imports/burp.xml imports/browser.har --scope example.com --scope api.example.com
+```
+
+서브도메인을 포함하는 scope는 따옴표로 감쌉니다.
+
+```bash
+python request_inventory.py import imports/burp.xml --scope "*.example.com"
+```
+
+현재 Burp **Save items** XML을 지원합니다. Scanner issue XML과 Burp 프로젝트 바이너리는 직접 가져오지 않습니다. XML의 외부 DTD·엔티티는 허용하지 않습니다. Burp의 표준 내부 ELEMENT/ATTLIST DTD는 제거한 뒤 파싱합니다.
+
+## 2. 브라우저 HAR 가져오기
+
+개발자 도구 → Network에서 **Preserve log**를 켜고 대상 기능을 사용한 뒤 요청 내용을 포함하는 HAR로 내보냅니다. 브라우저/내보내기 옵션에 따라 body가 생략될 수 있습니다. 이 경우 `body_not_captured`로 표시하며 값을 임의로 만들지 않습니다.
+
+```bash
+python request_inventory.py import imports/browser.har --scope example.com
+python request_inventory.py report --xlsx
+```
+
+## 3. Playwright로 직접 사용한 기능 기록하기
+
+```bash
+python -m pip install playwright
+python -m playwright install chromium
+python record_browser.py --url https://example.com --scope example.com --scope api.example.com --seconds 300
+python request_inventory.py report --xlsx
+```
+
+브라우저 창에서 직접 로그인하고 조회·수정 등의 기능을 사용합니다. 자동 로그인·자동 폼 제출·요청 재전송은 수행하지 않습니다. scope 밖 트래픽은 저장하지 않으며, 실제 브라우저는 정상 페이지 로딩을 위해 외부 리소스를 요청할 수 있습니다. 서비스 워커는 차단합니다. 브라우저에 입력한 요청 자체는 정상적으로 서버에 전송됩니다.
+
+이 기록기는 Content-Length가 명시된 1 MiB 이하의 구조화된 응답 body만 읽습니다. 길이를 알 수 없는 응답은 메타데이터만 기록합니다. 누락 없는 트래픽 수집이 필요하면 Burp XML을 사용하세요. WebSocket 메시지와 앱/서비스 워커에서만 발생하는 트래픽은 이 버전의 수집 대상이 아닙니다.
+
+## 4. JS 요청 구조 보존
+
+기존 파이프라인에서 `scan_linkfinder.sh`가 jsluice 결과를 JSONL로 보존합니다.
+
+```bash
+./scan_linkfinder.sh 00
+python collect_request_inventory.py --scope-file targets.txt --xlsx
+```
+
+직접 분석한 jsluice JSONL도 가져올 수 있습니다.
+
+```bash
+jsluice urls main.js > imports/main-js.jsonl
+python request_inventory.py import imports/main-js.jsonl --format jsluice --base-url https://example.com/static/main.js --scope example.com
+```
+
+JS URL을 기준으로 상대 경로를 해석합니다. 런타임의 API base URL이나 SPA에서 현재 문서 경로를 기준으로 해석되는 상대 경로는 실제 트래픽과 대조해야 합니다. 동적 변수·wrapper 함수·암호화된 payload는 정적 분석으로 실제 값을 확보할 수 없습니다.
+
+jsluice 원본 JSONL에는 JS에 들어 있는 비밀값이 포함될 수 있으므로 원본을 Git에 올리지 마세요. 자동 파이프라인은 원본 JSONL을 디스크에 남기지 않고 마스킹된 레코드로 변환합니다. JS 파일명은 URL 해시로 생성하여 다른 경로의 `main.js`가 덮어쓰이지 않게 했습니다.
+
+## 출력과 데이터 구조
+
+| 파일 | 용도 |
+|---|---|
+| `reports/request_inventory.sqlite3` | 로컬 요청/응답 인벤토리, 동일 관찰의 횟수·최초/최근 수집 시각 |
+| `reports/requests/index.html` | 네트워크 연결 없이 열 수 있는 단일 HTML 보고서 |
+| `reports/requests/requests.jsonl` | 다른 도구와 연동할 구조화된 기록 |
+| `reports/requests/evidence/*.json` | 요청/응답별 마스킹된 증거 |
+| `reports/requests/request_inventory.xlsx` | `--xlsx` 지정 시 생성되는 Excel |
+| `reports/requests/postman_review.json` | 메소드/body를 보존한 검토 전용 컬렉션 |
+
+`observed=true`는 실제 요청에서 확보한 기록입니다. `observed=false`는 URL 목록이나 JS의 정적 추출 결과입니다. `body.complete`는 body 수집/표현의 완전성을 나타내며 마스킹 여부와 별개입니다. 요청·응답은 정규화되므로 원본 패킷 바이트와 다릅니다. 압축 헤더·길이 헤더는 정규화된 패킷에서 제거합니다.
+
+`structure_id`는 요청 구조를 묶습니다. `request_id`는 마스킹 후 URL·메소드·헤더·body의 값 변형을 구분합니다. `observation_id`는 응답·출처까지 구분합니다. 서로 다른 인증 토큰 자체는 마스킹되어 동일값으로 취급할 수 있으므로 이 도구만으로 사용자별 세션을 구분하지 않습니다. 응답 차이는 별도 기록으로 남깁니다.
+
+Postman 컬렉션은 collection-level pre-request script로 실행을 차단합니다. 실제 요청을 보내려면 복사본에서 차단 스크립트를 직접 제거하고 세션·body·scope를 검토해야 합니다. UNKNOWN 메소드는 실제 메소드를 확인한 뒤 바꾸세요. multipart 파일 바이트는 포함되지 않습니다.
+
+## 민감정보와 제한
+
+- 알려진 민감 필드와 일반적인 토큰 패턴을 마스킹합니다. 임의 이름의 비밀값·개인정보를 완벽히 식별하는 기능은 아니므로 공유 전에 확인해야 합니다.
+- 구조화되지 않은 text/HTML은 기본적으로 body를 생략합니다. 꼭 필요한 경우 `--include-text`로 보존할 수 있지만 마스킹은 최선 노력 방식입니다.
+- multipart는 텍스트 필드값과 파일명·크기를 저장하고 파일 바이트는 생략합니다.
+- body는 최대 1 MiB, 입력 파일은 최대 128 MiB입니다. 초과 body는 부분 원문을 저장하지 않고 생략 사유를 표시합니다.
+- 실제 body에 없는 필드나 예시값을 생성하지 않습니다. `bodyParams`는 필드명 정보입니다.
+- HTML/Excel의 검토 후보는 규칙 기반의 분석 보조이며 취약점 확정이나 자동 검증 결과가 아닙니다.
+- 원본 HAR/XML과 결과 DB/보고서는 `.gitignore`에서 제외합니다. Unix 출력 파일 권한은 기본 0600입니다. 이 자체는 디스크 암호화를 의미하지 않습니다.
+
+## GitHub Actions
+
+- `v81_ci.yml`: push/PR 시 단위 테스트와 가상 데이터 보고서 생성만 수행합니다. 대상 스캔은 없습니다.
+- `passive_recon.yml`: 기존 URL 발굴 + JS 구조 보존 + v8.1 인벤토리/보고서 통합. **수동 실행**만 가능합니다.
+- 새 저장소에 `TARGET_DOMAINS`, `ACTIONS_CRYPTO_PASSWORD`를 별도로 등록해야 합니다. 원본 저장소의 Secrets는 자동 복사되지 않습니다.
+- `GEMINI_API_KEY`는 사용하지 않습니다.
+- Discord 전송은 기본 비활성입니다. 필요한 경우 저장소 변수 `ENABLE_DISCORD_DELIVERY=true`와 `DISCORD_WEBHOOK_URL`을 직접 설정합니다.
+- 이전 실행 결과의 v8.1 DB를 복원할 수 있습니다. 새 보고서에서는 현재 scope에 맞는 기록만 표시합니다.
+- 기존 파이프라인의 암호화된 결과물에는 `requests/`와 인벤토리 DB가 추가됩니다. 기존 ZIP 암호 형식은 이전 버전과 동일합니다.
+
+## 검증
+
+```bash
+python -m unittest discover -s tests -v
+python -m compileall -q .
+```
+
+의존성 설치 외의 테스트·예제 import/report는 실제 대상에 요청을 보내지 않습니다. Playwright 라이브러리/브라우저와 Go 수집 도구는 별도 설치가 필요합니다.
+
+## 새 저장소로 게시
+
+소스 묶음을 GitHub에 게시할 때는 **v8.1 새 저장소만** 사용하세요. GitHub CLI가 설치되고 인증되어 있는 환경에서는 다음 명령으로 새 공개 저장소를 생성할 수 있습니다.
+
+```bash
+git init -b main
+git add .
+git commit -m "feat: passive scan v8.1 request and body inventory"
+gh repo create ohjun1998/passive-scan_v8.1_pub --public --source . --remote origin --push
+```
+
+동일 이름의 저장소가 이미 있다면 덮어쓰지 말고 내용을 확인하세요. 기존 `passive-scan_v8_pub`을 remote로 지정하지 마세요.
+
+참고 문서: [Burp Save items](https://portswigger.net/burp/documentation/desktop/tools/message-editor), [Playwright Request](https://playwright.dev/python/docs/api/class-request), [jsluice](https://github.com/BishopFox/jsluice).
