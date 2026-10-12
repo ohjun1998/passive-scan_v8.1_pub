@@ -1,0 +1,30 @@
+name: v8.1 offline verification
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.10', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -r requirements-v81.txt
+      - name: Unit and integration tests (no target traffic)
+        run: python -m unittest discover -s tests -v
+      - name: Python and shell syntax
+        run: |
+          python -m compileall -q .
+          for script in *.sh; do bash -n "$script"; done
+      - name: Demo imports and reports
+        run: |
+          python request_inventory.py import examples/demo.har examples/demo-js.jsonl --scope example.test
+          python request_inventory.py report --xlsx
