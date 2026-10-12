@@ -33,6 +33,7 @@ class PipelineTests(unittest.TestCase):
             tool.write_text('#!/usr/bin/env python3\nprint('+repr('\n'.join(json.dumps(x) for x in records))+')\n')
             tool.chmod(0o700)
             (root/'sanitize_js_requests.py').symlink_to(PROJECT/'sanitize_js_requests.py')
+            (root/'js_asset_cache.py').symlink_to(PROJECT/'js_asset_cache.py')
             env = dict(os.environ, PATH=str(fake)+os.pathsep+os.environ['PATH'], PYTHONPATH=str(PROJECT))
             subprocess.run(['bash',str(PROJECT/'scan_linkfinder.sh'),'00'],cwd=root,env=env,check=True,capture_output=True)
             text = (results/'example.test_js_requests_00.jsonl').read_text()
