@@ -1,2 +1,2 @@
 """Offline request inventory for passive-scan v8.1."""
-__version__ = "8.1.0"
+__version__ = "8.1.1"
