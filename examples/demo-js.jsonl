@@ -1,0 +1,2 @@
+{"url":"https://example.test/api/profile","method":"PUT","bodyParams":["userId","nickname"],"headers":{"Content-Type":"application/json"}}
+{"url":"https://example.test/api/download","bodyParams":["fileId"]}
