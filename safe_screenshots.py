@@ -122,7 +122,10 @@ class BrowserGate:
 
 def configure_context(context, gate):
     context.route('**/*',gate.handle)
-    context.route_web_socket('**/*',lambda socket: socket.close())
+    # A routed socket stays disconnected from the server unless connect_to_server()
+    # is called. Avoid synchronous close() inside the websocket callback: current
+    # Playwright dispatch can deadlock there. Worker sockets use this route too.
+    context.route_web_socket('**/*',lambda socket: None)
 
 
 def main():
