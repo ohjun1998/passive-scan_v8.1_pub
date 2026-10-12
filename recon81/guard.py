@@ -143,17 +143,22 @@ class ProtectedHTTP:
             return {'status':0,'headers':{},'body':b'','complete':False}
         with response:
             headers = dict(response.headers.items())
-            self.guard.feedback(response.status, time.monotonic()-started, retry_after=headers.get('Retry-After',''),host=host)
             if method == 'HEAD':
+                self.guard.feedback(response.status,time.monotonic()-started,host=host)
                 return {'status':response.status,'headers':headers,'body':b'','complete':True}
             length = headers.get('Content-Length','')
             if length.isdigit() and int(length) > limit:
+                self.guard.feedback(response.status,time.monotonic()-started,host=host)
                 return {'status':response.status,'headers':headers,'body':b'','complete':False}
             chunks = []
             read = 0
             try:
                 while read <= limit:
-                    part = response.read(min(65536, limit + 1 - read))
+                    if time.monotonic()-started >= self.timeout:
+                        raise TimeoutError('response transfer deadline')
+                    # read1 returns available data after one underlying read. read()
+                    # can wait indefinitely for a full chunk on trickle responses.
+                    part = response.read1(min(65536, limit + 1 - read))
                     if not part:
                         break
                     self.guard.consume(len(part))
@@ -162,4 +167,5 @@ class ProtectedHTTP:
             except (URLError, OSError):
                 self.guard.feedback(failed=True,host=host)
                 return {'status':response.status,'headers':headers,'body':b'','complete':False}
+            self.guard.feedback(response.status,time.monotonic()-started,host=host)
             return {'status':response.status,'headers':headers,'body':b''.join(chunks) if read <= limit else b'', 'complete':read <= limit}
