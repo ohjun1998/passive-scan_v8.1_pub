@@ -54,6 +54,9 @@ def reidentify(record):
     identity_body = {k: v for k, v in record['body'].items() if k not in ('size_bytes', 'reason')}
     record['request_id'] = digest([record['url'], record['method'], record['headers'], identity_body, record['observed']])
     record['observation_id'] = digest([record['request_id'], response_identity(record['response']), record['source'], record.get('origin_url')])
+    if record.get('context') or record.get('asset'):
+        from .context import attach_context
+        attach_context(record,record['context'])
     return record
 
 
@@ -89,6 +92,12 @@ def native_record(item, include_text=False):
         resp = item['response']
         headers = sanitize_headers(resp.get('headers', []))
         result['response'] = {'status': int(resp.get('status', 0)), 'headers': headers, 'body': body_input(resp['body'], get_header(headers, 'content-type'))}
+    from .context import clean_context
+    result['context']=clean_context(item.get('context'))
+    for key in ('schema','asset'):
+        if key in item:
+            from .discovery import clean_metadata
+            result[key]=clean_metadata(item[key])
     return reidentify(result)
 
 
@@ -131,11 +140,17 @@ def burp_items(data, include_text=False):
 def load_records(path, fmt='auto', base_url=None, include_text=False):
     path = Path(path)
     if fmt == 'auto':
-        fmt = {'.har': 'har', '.xml': 'burp', '.jsonl': 'jsonl', '.txt': 'urls'}.get(path.suffix.lower())
+        fmt = {'.har': 'har', '.xml': 'burp', '.jsonl': 'jsonl', '.txt': 'urls','.json':'openapi','.yaml':'openapi','.yml':'openapi','.html':'html'}.get(path.suffix.lower())
         if not fmt:
             raise ValueError('Specify --format for this extension')
     data = read_limited(path)
-    if fmt == 'har':
+    if fmt == 'openapi':
+        from .discovery import openapi_records
+        yield from openapi_records(data,base_url)
+    elif fmt == 'html':
+        from .discovery import form_records
+        yield from form_records(data,base_url)
+    elif fmt == 'har':
         for entry in json.loads(data)['log']['entries']:
             yield har_entry(entry, include_text)
     elif fmt == 'burp':

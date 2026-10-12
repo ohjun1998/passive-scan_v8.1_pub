@@ -35,6 +35,10 @@ def digest(value):
     return hashlib.sha256(canonical(value).encode()).hexdigest()
 
 
+def invalid_json_constant(value):
+    raise ValueError('Non-finite JSON number')
+
+
 def redact_text(text):
     text = JWT.sub(MASK, str(text))
     text = re.sub(r'(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+', 'Bearer ' + MASK, text)
@@ -191,7 +195,7 @@ def normalize_body(data, content_type='', include_text=False):
         return omitted('binary_or_unsupported_encoding', len(data))
     try:
         if mime == 'application/json' or mime.endswith('+json'):
-            clean = sanitize_value(json.loads(text))
+            clean = sanitize_value(json.loads(text,parse_constant=invalid_json_constant))
             return {'kind': 'json', 'text': json.dumps(clean, ensure_ascii=False, indent=2), 'fields': field_paths(clean), 'complete': True, 'size_bytes': len(data)}
         if mime == 'application/x-www-form-urlencoded':
             pairs = [(k, MASK if SECRET.search(k) else redact_text(v)) for k, v in parse_qsl(text, keep_blank_values=True)]
@@ -293,7 +297,7 @@ def normalize_record(url, method, headers=None, body=None, response=None, source
     if response is not None:
         rh = response.get('headers', [])
         resp = {'status': int(response.get('status') or 0), 'headers': sanitize_headers(rh), 'body': normalize_body(response.get('body'), get_header(rh, 'content-type'), include_text)}
-    record = {'schema_version': '8.1', 'url': safe_url(url), 'method': method, 'headers': sanitize_headers(headers), 'body': request_body, 'response': resp, 'source': redact_text(str(source)), 'observed': bool(observed), 'timestamp': timestamp or now(), 'origin_url': safe_url(origin_url) if origin_url else None}
+    record = {'schema_version': '8.2', 'url': safe_url(url), 'method': method, 'headers': sanitize_headers(headers), 'body': request_body, 'response': resp, 'source': redact_text(str(source)), 'observed': bool(observed), 'timestamp': timestamp or now(), 'origin_url': safe_url(origin_url) if origin_url else None}
     p = urlsplit(record['url'])
     # Preserve full path, method, query key multiplicity and body structure.
     record['structure_id'] = digest([method, p.scheme, p.netloc, p.path, sorted(k for k, _ in parse_qsl(p.query, keep_blank_values=True)), request_type.split(';')[0].lower(), request_body['fields'], observed])
@@ -336,16 +340,27 @@ class Inventory:
         self.conn.execute('CREATE TABLE IF NOT EXISTS observations (id TEXT PRIMARY KEY, request_id TEXT NOT NULL, structure_id TEXT NOT NULL, record TEXT NOT NULL, first_seen TEXT NOT NULL, last_seen TEXT NOT NULL, seen_count INTEGER NOT NULL)')
         self.conn.execute('CREATE INDEX IF NOT EXISTS structures ON observations(structure_id)')
         self.conn.execute('CREATE INDEX IF NOT EXISTS requests ON observations(request_id)')
+        self.conn.execute('CREATE TABLE IF NOT EXISTS reviews (observation_id TEXT PRIMARY KEY, state TEXT NOT NULL, note TEXT NOT NULL, reviewed_at TEXT NOT NULL)')
 
     def add(self, record):
         t = now()
-        self.conn.execute('INSERT INTO observations VALUES (?, ?, ?, ?, ?, ?, 1) ON CONFLICT(id) DO UPDATE SET last_seen=excluded.last_seen, seen_count=seen_count+1', (record['observation_id'], record['request_id'], record['structure_id'], canonical(record), t, t))
+        self.conn.execute('INSERT INTO observations VALUES (?, ?, ?, ?, ?, ?, 1) ON CONFLICT(id) DO UPDATE SET record=excluded.record,last_seen=excluded.last_seen,seen_count=seen_count+1', (record['observation_id'], record['request_id'], record['structure_id'], canonical(record), t, t))
 
     def records(self):
-        for record, count, first, last in self.conn.execute('SELECT record, seen_count, first_seen, last_seen FROM observations ORDER BY structure_id, id'):
+        for record, count, first, last, state, note, reviewed in self.conn.execute('SELECT o.record,o.seen_count,o.first_seen,o.last_seen,r.state,r.note,r.reviewed_at FROM observations o LEFT JOIN reviews r ON r.observation_id=o.id ORDER BY o.structure_id,o.id'):
             data = json.loads(record)
             data.update(seen_count=count, first_seen=first, last_seen=last)
+            data.setdefault('context',{})
+            data['review']={'state':state or ('captured' if data['observed'] else 'discovered'),'note':note or '', 'reviewed_at':reviewed or ''}
             yield data
+
+    def review(self,observation_id,state,note=''):
+        from .context import STATES
+        if state not in STATES: raise ValueError('Invalid review state')
+        if not self.conn.execute('SELECT 1 FROM observations WHERE id=?',(observation_id,)).fetchone(): raise ValueError('Unknown observation')
+        if len(note)>4000 or any(ord(c)<32 and c not in '\n\t' for c in note): raise ValueError('Invalid review note')
+        if state in ('confirmed','false_positive') and not note.strip(): raise ValueError('A conclusion needs an evidence note')
+        self.conn.execute('INSERT INTO reviews VALUES (?,?,?,?) ON CONFLICT(observation_id) DO UPDATE SET state=excluded.state,note=excluded.note,reviewed_at=excluded.reviewed_at',(observation_id,state,redact_text(note),now()))
 
     def close(self):
         self.conn.commit()

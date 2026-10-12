@@ -63,7 +63,9 @@ class NetworkPolicy:
 
     @staticmethod
     def is_costly(url):
-        return bool(COSTLY.search(urlsplit(url).path))
+        path=urlsplit(url).path
+        if path.lower().endswith(('.js','.css','.png','.jpg','.jpeg','.svg','.woff','.woff2','.ico')): return False
+        return bool(COSTLY.search(path))
 
     def check(self, url, method='GET', manual=False):
         reason = self.reason(url, method, manual)

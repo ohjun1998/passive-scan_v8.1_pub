@@ -25,27 +25,22 @@ def postman(records):
     items = []
     seen = set()
     for r in records:
-        if r['request_id'] in seen:
+        context=r.get('context') or {}
+        key=(r['request_id'],context.get('actor',''),context.get('tenant',''))
+        if key in seen:
             continue
-        seen.add(r['request_id'])
-        request = {'method': r['method'], 'header': r['headers'], 'url': r['url'], 'description': '검토 전용. 민감값은 마스킹되어 있으며 자동 실행이 차단되어 있습니다. 관찰된 요청: ' + str(r['observed'])}
+        seen.add(key)
+        request = {'method': r['method'], 'header': r['headers'], 'url': r['url'], 'description': '검토 전용. 민감값은 마스킹되어 있으며 자동 실행이 차단되어 있습니다. 계정: '+context.get('actor','미지정')+' / 조직: '+context.get('tenant','미지정')+' / 관찰된 요청: ' + str(r['observed'])}
         body = r['body']
         if body['kind'] in ('json', 'form', 'xml', 'text'):
             request['body'] = {'mode': 'raw', 'raw': body['text']}
             if body['kind'] == 'json':
                 request['body']['options'] = {'raw': {'language': 'json'}}
         items.append({'name': r['method'] + ' ' + r['url'], 'request': request})
-    return {'info': {'name': 'Passive Scan v8.1 — 요청 검토 전용', 'schema': 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json', 'description': '자동 재전송 금지. 사용 전 scope·세션·body를 직접 확인하세요.'}, 'event': [{'listen': 'prerequest', 'script': {'type': 'text/javascript', 'exec': ['throw new Error("검토 전용 컬렉션입니다. 요청을 보내려면 복사본에서 이 차단 스크립트를 직접 제거하세요.");']}}], 'item': items}
+    return {'info': {'name': 'Passive Scan v8.2 — 요청 검토 전용', 'schema': 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json', 'description': '자동 재전송 금지. 사용 전 scope·세션·body를 직접 확인하세요.'}, 'event': [{'listen': 'prerequest', 'script': {'type': 'text/javascript', 'exec': ['throw new Error("검토 전용 컬렉션입니다. 요청을 보내려면 복사본에서 이 차단 스크립트를 직접 제거하세요.");']}}], 'item': items}
 
 
-HTML = r'''<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'"><title>Passive Scan v8.1 · 요청 인벤토리</title>
-<style>:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#101725;color:#e3eaf7;font:15px system-ui,sans-serif}header{padding:30px 4vw;border-bottom:1px solid #314158}h1{margin:0 0 10px;font-size:26px}p{color:#aebdd3;line-height:1.7}.stats{display:flex;gap:12px;flex-wrap:wrap}.stat{background:#1c2940;padding:14px 20px;border-radius:10px}.stat b{display:block;font-size:26px;color:#8dcbff}.toolbar{display:flex;gap:12px;flex-wrap:wrap;padding:18px 4vw}input,select,button{font:inherit;background:#1c2940;color:#edf3ff;border:1px solid #425570;border-radius:8px;padding:10px}input{min-width:260px;flex:1}main{padding:0 4vw 40px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.tablewrap{max-height:75vh;overflow:auto;border:1px solid #33425b;border-radius:10px}table{border-collapse:collapse;width:100%;font-size:13px}th{position:sticky;top:0;background:#24344e}td,th{text-align:left;padding:12px;border-bottom:1px solid #33425b;vertical-align:top}tr[data-index]{cursor:pointer}tr[data-index]:hover,tr.selected{background:#283d5e}td.url{overflow-wrap:anywhere;min-width:170px}.pill{white-space:nowrap;color:#8bdcbb}.static{color:#ffcb83}article{min-width:0;background:#172238;border:1px solid #33425b;border-radius:10px;padding:18px;max-height:75vh;overflow:auto}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0c1423;border-radius:8px;padding:14px;font:13px/1.6 ui-monospace,monospace}h2{font-size:20px}h3{font-size:15px;color:#91c8ff}.tabs{display:flex;gap:8px;margin-top:20px}.tabs button.active{background:#326593}#detailTitle{overflow-wrap:anywhere}.note{font-size:13px;color:#ffcf94}#visible{font-size:13px;color:#aebdd3}@media(max-width:1050px){.grid{grid-template-columns:1fr}.tablewrap{max-height:42vh}article{max-height:none}}
-</style><header><h1>Passive Scan <span style="color:#91c8ff">v8.1</span></h1><p>URL · 메소드 · body · 응답을 함께 확인하는 로컬 요청 인벤토리</p><div class="stats" id="stats"></div><p class="note">실제 트래픽과 정적 추출 결과를 구분합니다. 검토 후보는 취약점 확정 결과가 아닙니다. 패킷은 마스킹·정규화된 내용이며 원본 바이트와 다릅니다.</p></header><div class="toolbar"><input id="search" placeholder="URL, body 필드, body 값 검색"><select id="method"><option value="">모든 메소드</option></select><select id="source"><option value="">모든 출처</option></select><select id="observed"><option value="">모든 관찰 상태</option><option value="true">실제 요청</option><option value="false">정적 추출</option></select></div><main><p id="visible"></p><div class="grid"><div class="tablewrap"><table><thead><tr><th>메소드</th><th>URL</th><th>body 필드</th><th>응답</th><th>출처 / 상태</th></tr></thead><tbody id="rows"></tbody></table></div><article><h2 id="detailTitle">요청을 선택하세요</h2><p id="metadata"></p><p class="note" id="flags"></p><div class="tabs"><button data-tab="request" class="active">요청</button><button data-tab="response">응답</button><button data-tab="json">전체 기록</button></div><pre id="packet"></pre><h3>body 수집 상태</h3><pre id="bodyState"></pre></article></div></main><script id="data" type="application/json">__DATA__</script><script>
-'use strict';const records=JSON.parse(document.getElementById('data').textContent);let selected=-1,tab='request';const $=id=>document.getElementById(id);const stat=(label,value)=>{const e=document.createElement('div');e.className='stat';const b=document.createElement('b');b.textContent=value;e.append(b,document.createTextNode(label));$('stats').append(e)};stat('기록',records.length);stat('실제 요청',records.filter(r=>r.observed).length);stat('요청 구조',new Set(records.map(r=>r.structure_id)).size);stat('요청 변형',new Set(records.map(r=>r.request_id)).size);for(const [id,key] of [['method','method'],['source','source']])for(const value of [...new Set(records.map(r=>r[key]))].sort()){const o=document.createElement('option');o.value=value;o.textContent=value;$(id).append(o)}
-function render(){const q=$('search').value.toLowerCase();$('rows').replaceChildren();let count=0;records.forEach((r,i)=>{if(($('method').value&&r.method!==$('method').value)||($('source').value&&r.source!==$('source').value)||($('observed').value&&String(r.observed)!==$('observed').value)||!JSON.stringify([r.url,r.body.fields,r.body.text]).toLowerCase().includes(q))return;count++;const tr=document.createElement('tr');tr.dataset.index=i;if(i===selected)tr.className='selected';const values=[r.method,r.url,r.body.fields.join(', ')||'—',r.response?(r.response.status||'응답 대기'):'미수집',r.source+' / '+(r.observed?'실제 요청':'정적 추출')];values.forEach((v,j)=>{const td=document.createElement('td');td.textContent=v;if(j===1)td.className='url';if(j===4)td.className=r.observed?'pill':'static';tr.append(td)});tr.onclick=()=>{selected=i;render();details()};$('rows').append(tr)});$('visible').textContent=count+'개 표시 / '+records.length+'개 기록'}
-function details(){if(selected<0)return;const r=records[selected];$('detailTitle').textContent=r.method+' '+r.url;$('metadata').textContent='출처: '+r.source+' · 관찰: '+(r.observed?'실제 요청':'정적 구조')+' · 횟수: '+r.seen_count+' · 시각: '+r.timestamp;$('flags').textContent=(r.review_candidates||[]).join(' · ');const msg=tab==='request'?r: r.response;if(tab==='json')$('packet').textContent=JSON.stringify(r,null,2);else if(!msg)$('packet').textContent='응답이 수집되지 않았습니다.';else{const headline=tab==='request'?r.method+' '+r.url:'HTTP '+msg.status;const headers=msg.headers.map(h=>h.name+': '+h.value).join('\n');$('packet').textContent=headline+'\n'+headers+'\n\n'+(msg.body.text||'['+msg.body.reason+']')}$('bodyState').textContent=JSON.stringify({request:{kind:r.body.kind,complete:r.body.complete,reason:r.body.reason||'',fields:r.body.fields},response:r.response?{kind:r.response.body.kind,complete:r.response.body.complete,reason:r.response.body.reason||''}:null},null,2)}
-for(const id of ['search','method','source','observed'])$(id).addEventListener('input',render);for(const b of document.querySelectorAll('[data-tab]'))b.onclick=()=>{tab=b.dataset.tab;document.querySelectorAll('[data-tab]').forEach(x=>x.classList.toggle('active',x===b));details()};render();if(records.length){selected=0;render();details()}
-</script></html>'''
+from .dashboard import HTML
 
 
 def add_excel_sheets(workbook, records):
@@ -83,14 +78,48 @@ def add_excel_sheets(workbook, records):
                 c.alignment = Alignment(vertical='top', wrap_text=True)
 
 
-def generate(records, output, xlsx=False):
+def add_analysis_sheets(workbook,records,analysis):
+    from openpyxl.styles import Font,PatternFill,Alignment
+    def cell(value):
+        if isinstance(value,(dict,list)): value=json.dumps(value,ensure_ascii=False)
+        value=str(value)[:32000]
+        value=''.join(c for c in value if ord(c)>=32 or c in '\n\t\r')
+        return "'"+value if value.startswith(('=','+','-','@')) else value
+    tables={
+        'Candidates v8.2':(['Observation ID','Method','URL','Actor','Tenant','Scenario','Priority','Score','Review state','Reasons','Missing','Review note'],[[r['observation_id'],r['method'],r['url'],r['context'].get('actor',''),r['context'].get('tenant',''),r['context'].get('scenario',''),r['triage']['priority'],r['triage']['score'],r['review']['state'],r['triage']['hints'],r['triage']['missing'],r['review'].get('note','')] for r in records]),
+        'Coverage v8.2':(['Method','Route','Records','Observed','Actors','States','Missing'],[[r['method'],r['route'],r['records'],r['observed'],r['actors'],r['states'],r['missing']] for r in analysis['coverage']]),
+        'Compare v8.2':(['Method','URL','Actor A','Actor B','Evidence A','Evidence B','Comparable','Differences','Reason'],[[p['method'],p['url'],p['left_actor'],p['right_actor'],p['left_id'],p['right_id'],p['comparable'],p['differences'],p['reason']] for p in analysis['comparisons']]),
+        'Flows v8.2':(['Actor','Tenant','Scenario','Capture','Steps','Inferred links'],[[f['actor'],f['tenant'],f['scenario'],f['capture_id'],f['steps'],f['links']] for f in analysis['flows']])}
+    for name,(header,rows) in tables.items():
+        if name in workbook.sheetnames: del workbook[name]
+        ws=workbook.create_sheet(name); ws.append(header)
+        for row in rows: ws.append([cell(x) for x in row])
+        ws.freeze_panes='A2'; ws.auto_filter.ref=ws.dimensions
+        for c in ws[1]: c.font=Font(color='FFFFFF'); c.fill=PatternFill('solid',fgColor='193B5B')
+        for column in ws.columns: ws.column_dimensions[column[0].column_letter].width=32
+        for row in ws.iter_rows(min_row=2):
+            for c in row: c.alignment=Alignment(vertical='top',wrap_text=True)
+
+
+def generate(records, output, xlsx=False, ignore_fields=()):
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
-    enriched = [dict(r, review_candidates=review_candidates(r)) for r in records]
+    from .analysis import analyze
+    from .dashboard import HTML as dashboard
+    from .core import Scope
+    from .network_policy import NetworkPolicy
+    from urllib.parse import urlsplit
+    from review_queue import build
+    enriched,analysis=analyze(records,ignore_fields)
+    enriched=[dict(r,review_candidates=review_candidates(r)) for r in enriched]
     private_write(output / 'requests.jsonl', ''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in enriched))
     private_write(output / 'postman_review.json', json.dumps(postman(records), ensure_ascii=False, indent=2))
-    data = json.dumps(enriched, ensure_ascii=False).replace('<', '\\u003c').replace('&', '\\u0026')
-    private_write(output / 'index.html', HTML.replace('__DATA__', data))
+    private_write(output/'analysis.json',json.dumps(analysis,ensure_ascii=False,indent=2))
+    hosts={urlsplit(r['url']).hostname for r in records if urlsplit(r['url']).hostname}
+    queue=build(records,NetworkPolicy(Scope(hosts))) if hosts else {'schema_version':'8.2','items':[]}
+    private_write(output/'review_queue.json',json.dumps(queue,ensure_ascii=False,indent=2))
+    data = json.dumps({'records':enriched,'analysis':analysis}, ensure_ascii=False).replace('<', '\\u003c').replace('&', '\\u0026')
+    private_write(output / 'index.html', dashboard.replace('__DATA__', data))
     for r in enriched:
         private_write(output / 'evidence' / (r['observation_id'] + '.json'), json.dumps(r, ensure_ascii=False, indent=2))
     if xlsx:
@@ -107,6 +136,7 @@ def generate(records, output, xlsx=False):
         ws.column_dimensions['A'].width = 28
         ws.column_dimensions['B'].width = 16
         add_excel_sheets(wb, records)
+        add_analysis_sheets(wb,enriched,analysis)
         target = output / 'request_inventory.xlsx'
         # Reserve privately before openpyxl replaces the content.
         private_write(target, '')

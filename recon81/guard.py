@@ -125,12 +125,15 @@ class ProtectedHTTP:
         if method not in ('GET', 'HEAD') and not (method == 'POST' and approved_read_post):
             raise PolicyDenied('non_read_method')
         self.policy.check(url, 'GET' if approved_read_post else method)
+        for k,v in (headers or {}).items():
+            if k.lower() in ('x-http-method-override','x-method-override','x-http-method','x-original-method') and str(v).upper() not in ('GET','HEAD'):
+                raise PolicyDenied('non_read_method_override')
         self.guard.reserve(url)
         host = urlsplit(url).netloc
         started = time.monotonic()
         try:
             safe_headers = {k:v for k,v in (headers or {}).items() if k.lower() not in ('host', 'content-length', 'connection', 'accept-encoding', 'proxy-authorization')}
-            safe_headers.update({'User-Agent':'PassiveScan/8.1 protected-recon', 'Accept-Encoding':'identity'})
+            safe_headers.update({'User-Agent':'PassiveScan/8.2 protected-recon', 'Accept-Encoding':'identity'})
             response = self.opener.open(Request(url, headers=safe_headers, data=data, method=method), timeout=self.timeout)
         except HTTPError as error:
             try:
