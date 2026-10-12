@@ -4,12 +4,14 @@
 
 | 항목 | 결과 |
 |---|---|
-| Python 3.12 로컬 테스트 | 68개 통과, 실제 Chromium 테스트 1개는 로컬 미설치로 생략 |
+| Python 3.12 로컬 테스트 | 69개 통과, 실제 Chromium 테스트 1개는 로컬 브라우저 설치 실패로 생략 |
+| GitHub CI Python 3.10 / 3.12 / 3.13 | 각 69개 통과 (브라우저 테스트는 별도 작업) |
+| 실제 Chromium + 루프백 서버 | 1개 통과: JS 렌더링·조회 POST 유지, 변경/외부/WebSocket 전송 차단 |
 | Python/Bash 구문과 diff 공백 검사 | 통과 |
 | Actions YAML 구조 | 3개 워크플로 파싱 통과 |
 | 보호 정책 | scope·인코딩된 변경 경로·민감 query·페이지 크기 검사, 전송 전 차단 검증 |
 | 가용성/기능성 균형 | 다운로드·export·8443·정상 조회·GraphQL query 유지, 단일 500 허용 검증 |
-| 과부하 감시 | 429/Retry-After, 3회 연속 오류, 호스트별 지속 지연, 요청/바이트 예산 검증 |
+| 과부하 감시 | 429/Retry-After, 3회 연속 오류, 호스트별 지속 지연, 요청/바이트 예산과 trickle 응답 전송 제한 검증 |
 | CLI 감독 | 부분 로그에도 deadline 준수, 마지막 줄바꿈 없는 결과 보존, 중단 전 429 증거 보존 |
 | JS 캐시 | 전부 적중하면 추가 요청 0, 만료/실패 기록 처리 검증 |
 | 브라우저 정책 | 모의 route에서 scope 밖/변경 요청/위험 redirect 차단, 조회 POST 유지 검증 |
@@ -17,7 +19,9 @@
 | 실제 body 수집 | 기존 Burp/HAR/브라우저 변환·마스킹 테스트 모두 유지 |
 | 예제 import/report | 실제 대상 요청 0 |
 
-실제 대상의 스캔·취약점 테스트·POST 재전송·Discord 전송은 수행하지 않았습니다. 실제 Chromium 통합 테스트는 CI의 `browser-fixture` 작업에 추가했으며 루프백 서버에서 JS 렌더링·조회 POST·변경/외부/WebSocket 차단을 검증합니다. 대상 사이트의 의미론적 GET 동작, 원격 Go 수집 도구의 모든 전송과 다중 runner의 즉각적인 동시 중단은 테스트로 보장하지 않습니다. [운영 범위와 남는 제한](AVAILABILITY.md)을 참고하세요.
+실제 대상의 스캔·취약점 테스트·POST 재전송·Discord 전송은 수행하지 않았습니다. 실제 Chromium 통합 테스트는 CI의 `browser-fixture` 작업에서 통과했습니다. 루프백 서버에 도달한 요청을 검사하여 JS 렌더링·조회 POST·변경/외부/WebSocket 차단을 확인했습니다. WebSocket 콜백의 동기 close 정체도 실제 브라우저에서 발견해 수정했습니다. 대상 사이트의 의미론적 GET 동작, 원격 Go 수집 도구의 모든 전송과 다중 runner의 즉각적인 동시 중단은 테스트로 보장하지 않습니다. [운영 범위와 남는 제한](AVAILABILITY.md)을 참고하세요.
+
+원격 검증 기록: [69개 단위·통합 테스트와 별도 Chromium 테스트](https://github.com/ohjun1998/passive-scan_v8.1_pub/actions/runs/38230437231). 검증 소스 커밋: `f1972603b21b21275e2a62becd482739a3708bef`.
 
 ---
 
