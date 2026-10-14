@@ -58,6 +58,15 @@
     "workflow YAML parse"
   ],
   "github_ci": {
-    "status": "pending"
+    "status": "success",
+    "run_id": 38655191464,
+    "tested_head": "60288e6f0698ff53a4770440bc963e9b6f82a0ba",
+    "jobs": [
+      "Python 3.10",
+      "Python 3.12",
+      "Python 3.13",
+      "real Chromium"
+    ],
+    "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/actions/runs/38655191464"
   }
 }
