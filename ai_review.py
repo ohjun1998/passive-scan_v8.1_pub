@@ -22,20 +22,62 @@ def main(argv=None):
     p.add_argument('--packet', required=True)
     p.add_argument('--result', required=True)
     p.add_argument('--output', required=True)
+    p = sub.add_parser('batch-prepare')
+    p.add_argument('--report', required=True); p.add_argument('--output', required=True)
+    p.add_argument('--scope', action='append', required=True); p.add_argument('--authority')
+    p.add_argument('--max-records', type=int, default=12); p.add_argument('--max-bytes', type=int, default=65536)
+    p.add_argument('--body-bytes', type=int, default=6144)
+    p = sub.add_parser('batch-import')
+    p.add_argument('--batch', required=True); p.add_argument('--packet-id', required=True); p.add_argument('--result', required=True)
+    p = sub.add_parser('batch-run')
+    p.add_argument('--batch', required=True); p.add_argument('--timeout', type=int, default=300); p.add_argument('--model')
+    p.add_argument('--retry-failed', action='store_true'); p.add_argument('--max-attempts', type=int, default=3)
+    p = sub.add_parser('batch-report')
+    p.add_argument('--batch', required=True); p.add_argument('--output', required=True)
+    p = sub.add_parser('coverage'); p.add_argument('--batch', required=True)
+    p = sub.add_parser('evaluate'); p.add_argument('--review', required=True); p.add_argument('--labels', required=True); p.add_argument('--output', required=True)
+    p = sub.add_parser('pdf'); p.add_argument('--review', required=True); p.add_argument('--output', required=True)
+    p.add_argument('--font'); p.add_argument('--max-reviews', type=int, default=200)
     args = parser.parse_args(argv)
     try:
         if args.command == 'prepare':
             prepare_review(args.report, args.output, args.scope, args.max_records, args.max_bytes)
         elif args.command == 'import':
             import_review(args.packet, args.result, args.output)
+        elif args.command == 'batch-prepare':
+            from recon81.review_batch import prepare_batch
+            from recon81.ai_review import load_json
+            prepare_batch(args.report,args.output,args.scope,load_json(args.authority) if args.authority else None,
+                          args.max_records,args.max_bytes,args.body_bytes)
+        elif args.command == 'batch-import':
+            from recon81.review_batch import import_packet
+            import_packet(args.batch,args.packet_id,args.result)
+        elif args.command in ('batch-run','coverage'):
+            from recon81.review_batch import run_batch,refresh
+            import json
+            result = run_batch(args.batch,args.timeout,args.model,args.retry_failed,args.max_attempts) if args.command=='batch-run' else refresh(args.batch)
+            print(json.dumps(result['summary'],ensure_ascii=False))
+            return 3 if args.command=='batch-run' and result['summary']['completed_packets']!=result['summary']['packets'] else 0
+        elif args.command == 'batch-report':
+            from recon81.review_reporting import batch_report
+            batch_report(args.batch,args.output)
+        elif args.command == 'evaluate':
+            from recon81.review_reporting import evaluate
+            import json
+            print(json.dumps(evaluate(args.review,args.labels,args.output)['metrics'],ensure_ascii=False))
+        elif args.command == 'pdf':
+            from recon81.review_reporting import export_pdf
+            export_pdf(args.review,args.output,args.font,args.max_reviews)
         else:
             from recon81.codex_review import run_review
             run_review(args.report, args.output, args.scope, args.max_records, args.max_bytes, args.timeout, args.model)
-    except (OSError, ValueError, TypeError, KeyError, RecursionError) as exc:
+    except (OSError, ValueError, TypeError, KeyError, RecursionError, ImportError) as exc:
         # Never log raw captured evidence, subprocess output or credentials.
-        print('AI review failed: ' + type(exc).__name__ + '. See docs/V84.md troubleshooting.', file=sys.stderr)
+        from recon81.codex_review import ReviewFailure
+        detail = exc.code+' ('+exc.stage+')' if isinstance(exc,ReviewFailure) else type(exc).__name__
+        print('AI review failed: '+detail+'. See docs/V85.md troubleshooting.',file=sys.stderr)
         return 2
-    print('Saved AI review output: ' + args.output)
+    print('Saved AI review output: ' + getattr(args,'output',getattr(args,'batch','')))
     return 0
 
 
