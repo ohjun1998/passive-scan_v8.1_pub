@@ -8,6 +8,10 @@ from recon81.ai_review import prepare_review, import_review
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
+    p = sub.add_parser('doctor', help='Check Codex setup; --probe sends a fixed evidence-free model request')
+    p.add_argument('--probe', action='store_true'); p.add_argument('--output')
+    p.add_argument('--timeout', type=int, default=60); p.add_argument('--model')
+    p.add_argument('--first-response-timeout', type=int, default=60)
     for command in ('prepare', 'codex'):
         p = sub.add_parser(command)
         p.add_argument('--report', required=True)
@@ -31,6 +35,7 @@ def main(argv=None):
     p.add_argument('--batch', required=True); p.add_argument('--packet-id', required=True); p.add_argument('--result', required=True)
     p = sub.add_parser('batch-run')
     p.add_argument('--batch', required=True); p.add_argument('--timeout', type=int, default=300); p.add_argument('--model')
+    p.add_argument('--first-response-timeout', type=int, default=60)
     p.add_argument('--retry-failed', action='store_true'); p.add_argument('--max-attempts', type=int, default=3)
     p = sub.add_parser('batch-report')
     p.add_argument('--batch', required=True); p.add_argument('--output', required=True)
@@ -40,7 +45,16 @@ def main(argv=None):
     p.add_argument('--font'); p.add_argument('--max-reviews', type=int, default=200)
     args = parser.parse_args(argv)
     try:
-        if args.command == 'prepare':
+        if args.command == 'doctor':
+            import json
+            from recon81.codex_review import diagnose
+            from recon81.ai_review import _publish, _json
+            result = diagnose(args.probe, args.timeout, args.model, args.first_response_timeout)
+            if args.output:
+                _publish(args.output, {'diagnostic.json': _json(result)})
+            print(json.dumps(result, ensure_ascii=False))
+            return 0 if result['status'] == 'ready' else 2
+        elif args.command == 'prepare':
             prepare_review(args.report, args.output, args.scope, args.max_records, args.max_bytes)
         elif args.command == 'import':
             import_review(args.packet, args.result, args.output)
@@ -55,7 +69,7 @@ def main(argv=None):
         elif args.command in ('batch-run','coverage'):
             from recon81.review_batch import run_batch,refresh
             import json
-            result = run_batch(args.batch,args.timeout,args.model,args.retry_failed,args.max_attempts) if args.command=='batch-run' else refresh(args.batch)
+            result = run_batch(args.batch,args.timeout,args.model,args.retry_failed,args.max_attempts,args.first_response_timeout) if args.command=='batch-run' else refresh(args.batch)
             print(json.dumps(result['summary'],ensure_ascii=False))
             return 3 if args.command=='batch-run' and result['summary']['completed_packets']!=result['summary']['packets'] else 0
         elif args.command == 'batch-report':
@@ -75,7 +89,7 @@ def main(argv=None):
         # Never log raw captured evidence, subprocess output or credentials.
         from recon81.codex_review import ReviewFailure
         detail = exc.code+' ('+exc.stage+')' if isinstance(exc,ReviewFailure) else type(exc).__name__
-        print('AI review failed: '+detail+'. See docs/V85.md troubleshooting.',file=sys.stderr)
+        print('AI review failed: '+detail+'. See docs/V851.md troubleshooting.',file=sys.stderr)
         return 2
     print('Saved AI review output: ' + getattr(args,'output',getattr(args,'batch','')))
     return 0

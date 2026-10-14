@@ -13,9 +13,23 @@ from .review_batch import refresh,serialized
 @serialized
 def batch_report(directory,output):
     coverage=refresh(directory);aggregate=load_json(Path(directory)/'aggregate.json',16*1024*1024)
+    counts={'codex_verified':0,'manual_or_unverified':0,'incomplete':0}
+    for spec in coverage['packets']:
+        if spec['status']!='completed':
+            counts['incomplete']+=1
+            continue
+        receipt=load_json(Path(directory)/'results'/spec['packet_id']/'execution.json')
+        verified=(receipt.get('provider')=='codex_chatgpt_login' and receipt.get('status')=='completed'
+                  and receipt.get('model_execution_verified') is True
+                  and receipt.get('completion_events_verified') is True
+                  and receipt.get('citation_validation')=='verified')
+        counts['codex_verified' if verified else 'manual_or_unverified']+=1
+    all_verified=bool(coverage['packets']) and counts['codex_verified']==len(coverage['packets'])
     lines=['# 저장 증거 AI 검토 보고서','', '인용 일치는 위치·발췌 확인이며 취약점 확정·재현 검증이 아닙니다.', '',
         '배치 ID: '+aggregate['batch_id'],'',
         f"완료 묶음 {coverage['summary']['completed_packets']} / 전체 {coverage['summary']['packets']}",
+        '실제 Codex 실행 확인: '+str(counts['codex_verified'])+' / '+str(len(coverage['packets'])),
+        '수동·미검증 결과: '+str(counts['manual_or_unverified'])+' / 미완료: '+str(counts['incomplete']),
         '진단 상태: '+json.dumps(coverage['summary']['stages'],ensure_ascii=False),'']
     for i,review in enumerate(aggregate['reviews'],1):
         draft=review['report_draft']
@@ -28,7 +42,9 @@ def batch_report(directory,output):
     page='<!doctype html><html lang="ko"><meta charset="utf-8"><title>AI 검토</title><style>body{max-width:1100px;margin:32px auto;padding:16px;font:16px/1.7 sans-serif}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><h1>저장 증거 AI 검토</h1><pre>'+html.escape(text)+'</pre></html>'
     return _publish(output,{'aggregate.json':_json(aggregate),'coverage.json':_json(coverage),'review.md':text,'index.html':page,
         'execution.json':_json({'provider':'batch_aggregate','human_confirmation_required':True,'target_requests_sent':0,
-            'model_execution_verified':False,'notice':'Per-packet execution receipts are authoritative; aggregate does not attest all model executions.'})})
+            'model_execution_verified':all_verified,'packet_execution_counts':counts,
+            'subscription_plan_verified':False,
+            'notice':'Execution counts describe validated local packet receipts, not semantic quality, subscription tier or reproduction.'})})
 
 
 def _read_report(directory):
@@ -73,6 +89,10 @@ def evaluate(directory,labels_path,output):
     metrics=dict(counts,precision=tp/(tp+fp) if tp+fp else None,recall=tp/positives if positives else None,
                  labeled_cases=len(cases),expected_positives=positives)
     result={'schema_version':'8.5','label_provenance':sanitize_value(labels['provenance']),'metrics':metrics,'cases':cases,
+            'execution_provenance':{'provider':execution.get('provider'),
+                'model_execution_verified':execution.get('model_execution_verified') is True,
+                'packet_execution_counts':execution.get('packet_execution_counts'),
+                'subscription_plan_verified':False},
             'notice':'Metrics apply only to these user-declared labels. Citation correctness is not semantic correctness or general detection quality.'}
     _publish(output,{'evaluation.json':_json(result)})
     return result

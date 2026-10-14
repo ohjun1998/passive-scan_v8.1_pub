@@ -182,7 +182,7 @@ class V85Tests(unittest.TestCase):
         packet=self.packets(self.prepare())[0]
         with patch('recon81.codex_review._process',side_effect=FileNotFoundError):
             with self.assertRaises(ReviewFailure) as caught:execute_packet(packet,10)
-        self.assertEqual('CLI_OR_RESULT_MISSING',caught.exception.code)
+        self.assertEqual('CLI_NOT_FOUND',caught.exception.code)
     def test_header_citation_and_out_of_range_pointer(self):
         packet=self.packets(self.prepare())[0];value=answer(packet);cite=value['reviews'][0]['citations'][0]
         cite.update(location='response.headers',pointer='/0/value',excerpt='application/json')

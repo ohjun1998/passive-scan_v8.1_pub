@@ -1,6 +1,36 @@
 # 유스케이스와 기능 변경
 
-현재 비교 기준: 8.4.1 → 8.5.0. [최신 전체 흐름도](FLOW_V85.md)와 문서 아래의 v8.5 유스케이스를 참고하세요.
+현재 비교 기준: 8.5.0 → 8.5.1. [실행 안내](V851.md), 아래 v8.5.1 유스케이스와 [전체 흐름도](FLOW_V85.md)를 참고하세요.
+
+## v8.5.1 — 실행 진단과 남은 작업 연결
+
+주황/신규는 실행 전 진단, 파랑/개선은 제한 설정·실행 출처 연결, 회색/유지는 기존 증거 처리입니다.
+
+```mermaid
+flowchart TB
+    operator(("진단자"))
+    subgraph system["Passive Scan v8.5.1"]
+        doctor(["신규 · CLI·인증·연결 진단"])
+        batch(["유지 · 저장 증거 분할·인용 검사"])
+        resume(["개선 · 첫 응답 제한·명시적 재시도"])
+        report(["개선 · 실행 출처·커버리지·평가"])
+    end
+    operator --- doctor
+    operator --- batch
+    operator --- resume
+    operator --- report
+    doctor -. "연결 확인 후 선택" .-> resume
+    batch -. "불변 패킷" .-> resume
+    resume -. "완료·수동·미완료 구분" .-> report
+    classDef added fill:#fff1df,stroke:#d77708,color:#663600
+    classDef changed fill:#e7f3ff,stroke:#2675bb,color:#163e65
+    classDef kept fill:#edf0f3,stroke:#798596,color:#344252
+    class doctor added
+    class resume,report changed
+    class batch kept
+```
+
+기본 doctor는 설정만 검사합니다. --probe는 고정된 무해한 JSON 요청 한 건을 모델 서비스에 보내며, 대상 증거와 대상 요청을 포함하지 않습니다. 실제 실행 확인은 모델 판정의 정확성·구독 등급·재현 확인과 별도입니다.
 
 이전 비교 기준: 8.2.0 → 8.4.1. 아래 v8.2 그림은 이전 변경 기록이며, 최신 전체 흐름은 [시간순 전체 흐름도](FLOW_V84.md)를 참고하세요.
 
@@ -185,7 +215,7 @@ flowchart TB
 
 역할은 시스템 경계 밖에 있습니다. AI 의견을 human confirmed 상태로 자동 반영하지 않으며, 진단자가 최종 검토합니다. 기존 수집·계정 비교·선택 조회 기능은 유지합니다.
 
-## v8.5.0 — 최신 유스케이스
+## v8.5.0 — 이전 버전의 전체 유스케이스
 
 비교 기준: v8.4.1 → v8.5.0. 주황/신규, 파랑/개선, 회색/유지입니다. 전체 시간순 흐름과 도구·데이터는 [v8.5 전체 흐름](FLOW_V85.md), 실행 명령은 [v8.5 안내](V85.md)를 참고하세요.
 

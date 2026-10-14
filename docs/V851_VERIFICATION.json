@@ -1,0 +1,63 @@
+{
+  "cli_diagnostic": {
+    "checks": [
+      "cli",
+      "authentication",
+      "capabilities",
+      "mcp_configuration"
+    ],
+    "cli_version": "0.162.1",
+    "code": "FIRST_RESPONSE_TIMEOUT",
+    "evidence_sent": false,
+    "model_execution_verified": false,
+    "probe_requested": true,
+    "requested_model": null,
+    "schema_version": "8.5.1",
+    "stage": "response",
+    "status": "failed",
+    "subscription_plan_verified": false,
+    "target_requests_sent": 0
+  },
+  "coverage": {
+    "completed_packets": 0,
+    "packets": 22,
+    "records": 77,
+    "reproduction_verified": 0,
+    "stages": {
+      "captured": 77
+    }
+  },
+  "evaluation_labels": 50,
+  "expected_positive_labels": 13,
+  "identity_links": 4,
+  "model_quality_measured": false,
+  "new_reproduction_verified": false,
+  "new_target_requests": 0,
+  "observations": 77,
+  "packets": 22,
+  "policy_links": 50,
+  "source_archive_sha256": "bb6b785e980b5569731b123410a58a99879af70b5f84e1d81a42b7af135ac2b3",
+  "source_hashes_verified": 104,
+  "source_receipts": {
+    "analysis.json": "c1f033cab94287b9b9a3fcac6f4a6856fca0dcb3f2d34936acca5b0eb1c406aa",
+    "requests.jsonl": "66d78ee21f9abab3b83c4133c9330782ae0246df840e65f678800a0d3483a999"
+  },
+  "version": "8.5.1",
+  "verification_date_kst": "2026-10-15",
+  "checked_at_utc": "2026-10-14T23:34:03.630843+00:00",
+  "local_tests": {
+    "discovered": 158,
+    "passed": 156,
+    "skipped_optional_chromium": 2,
+    "new_regression_tests": 9
+  },
+  "syntax_checks": [
+    "compileall",
+    "bash -n",
+    "git diff --check",
+    "workflow YAML parse"
+  ],
+  "github_ci": {
+    "status": "pending"
+  }
+}

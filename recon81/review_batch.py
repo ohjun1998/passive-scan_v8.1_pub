@@ -189,10 +189,11 @@ def refresh(directory):
 
 
 @serialized
-def run_batch(directory,timeout=300,model=None,retry_failed=False,max_attempts=3):
-    from .codex_review import execute_packet,ReviewFailure
+def run_batch(directory,timeout=300,model=None,retry_failed=False,max_attempts=3,first_response_timeout=60):
+    from .codex_review import execute_packet,ReviewFailure,_execution_settings
     directory=Path(directory);index=verify_batch(directory)
     if not 1<=max_attempts<=3:raise ValueError('Invalid attempt cap')
+    _execution_settings(timeout,model,first_response_timeout)
     for spec in index['packets']:
         pid=spec['packet_id'];packet=load_json(directory/'packets'/pid/'packet.json',250000)
         if _accepted(directory,pid,packet) is not None:continue
@@ -202,7 +203,8 @@ def run_batch(directory,timeout=300,model=None,retry_failed=False,max_attempts=3
         if len(history)>=max_attempts:continue
         started=time.monotonic()
         attempt={'number':len(history)+1,'status':'started','stage':'preflight','stage_history':[{'stage':'preflight','elapsed_seconds':0}],
-                 'events':[],'target_requests_sent':0}
+                 'events':[],'target_requests_sent':0,
+                 'settings':{'timeout':timeout,'first_response_timeout':min(first_response_timeout,timeout),'requested_model':model}}
         history.append(attempt);private_write(history_path,_json(history))
         def progress(stage,event=None):
             attempt['stage']=stage
@@ -211,7 +213,7 @@ def run_batch(directory,timeout=300,model=None,retry_failed=False,max_attempts=3
             if event and len(attempt['events'])<200:attempt['events'].append(event)
             private_write(history_path,_json(history))
         try:
-            result,execution=execute_packet(packet,timeout,model,progress)
+            result,execution=execute_packet(packet,timeout,model,progress,first_response_timeout)
             render_review(packet,result,directory/'results'/pid,execution)
             attempt.update(status='completed',stage='published')
         except (ValueError,OSError,KeyError,TypeError,RecursionError) as error:

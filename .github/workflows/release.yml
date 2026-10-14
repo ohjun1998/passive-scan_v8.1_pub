@@ -1,0 +1,55 @@
+name: Source release
+on:
+  push:
+    branches: [main]
+    paths: [VERSION, 'docs/releases/**', '.github/workflows/release.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-v81.txt -r requirements-report.txt
+      - name: Verify source and release version
+        run: |
+          test -f "docs/releases/v$(cat VERSION).md"
+          python -m unittest discover -s tests -q
+          python -m compileall -q .
+          for script in *.sh; do bash -n "$script"; done
+      - name: Verify real Chromium locally
+        env:
+          RUN_BROWSER_TESTS: '1'
+        run: |
+          python -m pip install -r requirements-browser.txt
+          python -m playwright install --with-deps chromium
+          python -m unittest discover -s tests -p test_browser_runtime.py -v
+      - name: Package tracked source only
+        run: |
+          release_version="$(cat VERSION)"
+          mkdir dist
+          git archive --format=zip --prefix="passive-scan-${release_version}/" HEAD -o "dist/passive-scan-${release_version}.zip"
+          cd dist
+          sha256sum "passive-scan-${release_version}.zip" > SHA256SUMS
+      - name: Publish prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_version="$(cat VERSION)"
+          release_tag="v${release_version}"
+          if gh release view "$release_tag" > /dev/null 2>&1; then
+            exit 0
+          fi
+          gh release create "$release_tag" "dist/passive-scan-${release_version}.zip" dist/SHA256SUMS --target "$GITHUB_SHA" --prerelease --title "Passive Scan ${release_tag}" --notes-file "docs/releases/${release_tag}.md"
