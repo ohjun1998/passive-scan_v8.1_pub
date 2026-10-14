@@ -1,0 +1,57 @@
+{
+  "package_kind": "v8.4_prompt_update_patch_not_full_source",
+  "project_applied": false,
+  "full_project_regression": "not_run_latest_source_unavailable",
+  "files": [
+    {
+      "path": "README_KR.md",
+      "sha256": "d0d8c66c700069eb270c2f68150c8e5261861e79a292e8b88c06eaeb11c837c4",
+      "bytes": 2954
+    },
+    {
+      "path": "apply_prompt_update.py",
+      "sha256": "7a36b3962b9f2f1a90523a111984e21c566646d0856445930850ae8f8b635527",
+      "bytes": 4774
+    },
+    {
+      "path": "disclosure_prompt_update.patch",
+      "sha256": "0ae2c3bef34736965b3567294618806a9a247b4b32f8aebda0dc4b57a066bd2c",
+      "bytes": 4204
+    },
+    {
+      "path": "disclosure_rules.txt",
+      "sha256": "a3893094c279cad844bb1be5c6bcc2b472b69b9b211fb5a898356be232161aef",
+      "bytes": 3293
+    },
+    {
+      "path": "docs/PROMPT_DISCLOSURE_REVIEW.md",
+      "sha256": "df06e9eed82395c7bc9984b8beacee3183e6c0f8854da0c3a4c9b00b1dea0538",
+      "bytes": 6180
+    },
+    {
+      "path": "make_prompt_replacement.py",
+      "sha256": "9209e95e6d7f72d8179ec0ac2ee7521d0ef9c5ab3530e76c893cf22f0a034dc6",
+      "bytes": 5133
+    },
+    {
+      "path": "updated_fixed_prompt.txt",
+      "sha256": "aa4507f6868a903e7844c3bcf45acd7297f4cd37544ce0e7bbdd32816c2ec1e6",
+      "bytes": 4421
+    },
+    {
+      "path": "verification/previous_make_prompt.py.txt",
+      "sha256": "a1c8a7a55104a61f1df930ee807804dc3674cb25e78f69dc493e70a69708380e",
+      "bytes": 1439
+    },
+    {
+      "path": "verification/results.json",
+      "sha256": "3a0b35194d0e2b2364e2924909033b4721cff6f9ef21ee794b254c9f00e00bc3",
+      "bytes": 913
+    },
+    {
+      "path": "verification/verify_update.py",
+      "sha256": "024a78a0b2d69f0b27a83f03c7f5b16129134e0ae99c39efa8d31c5940e1b9d9",
+      "bytes": 4798
+    }
+  ]
+}
