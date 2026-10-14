@@ -16,6 +16,7 @@ encrypted*/
 global_js_db.txt
 storage_state*.json
 browser_profile/
+dist/
 
 # Deliberately synthetic test fixtures.
 !examples/*.har

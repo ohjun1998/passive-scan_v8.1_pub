@@ -212,6 +212,78 @@ def _configuration(cwd, progress=None):
     return flags
 
 
+def _execution_args(directory, flags, model=None):
+    args = ['codex'] + flags + ['exec', '--json', '--sandbox', 'read-only', '--ephemeral',
+            '--skip-git-repo-check', '--output-schema', str(Path(directory) / 'schema.json'),
+            '-o', str(Path(directory) / 'result.json')]
+    if model:
+        args += ['--model', model]
+    return args + ['-']
+
+
+def _execution_settings(timeout, model, first_response_timeout=60):
+    if not 10 <= timeout <= 3600 or not 1 <= first_response_timeout <= 3600:
+        raise ReviewFailure('INVALID_EXECUTION_SETTINGS', 'preflight')
+    if model is not None and (not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}', model)
+                              or model.lower() in ('pro', 'chatgpt-pro')):
+        raise ReviewFailure('INVALID_MODEL_ID', 'preflight')
+
+
+def diagnose(probe=False, timeout=60, model=None, first_response_timeout=60):
+    """Check the local adapter; only --probe sends a fixed, evidence-free model request."""
+    report = {'schema_version': '8.5.1', 'status': 'failed', 'stage': 'preflight',
+              'checks': [], 'probe_requested': probe, 'model_execution_verified': False,
+              'subscription_plan_verified': False, 'target_requests_sent': 0,
+              'evidence_sent': False, 'requested_model': None}
+    def progress(stage):
+        report['stage'] = stage
+    try:
+        _execution_settings(timeout, model, first_response_timeout)
+        report['requested_model'] = model
+        with tempfile.TemporaryDirectory(prefix='passive-doctor-') as directory:
+            progress('cli')
+            version, _ = _process(['codex', '--version'], directory, 20)
+            match = re.fullmatch(r'codex-cli ([0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?)\s*', version)
+            if not match:
+                raise ReviewFailure('UNSUPPORTED_CLI', 'cli')
+            report['cli_version'] = match.group(1)
+            report['checks'].append('cli')
+            def checked(stage):
+                previous = report['stage']
+                if previous not in report['checks']:
+                    report['checks'].append(previous)
+                progress(stage)
+            flags = _configuration(directory, checked)
+            report['checks'].append('mcp_configuration')
+            if probe:
+                from .core import private_write
+                from .ai_review import load_json
+                schema = {'type': 'object', 'properties': {'ready': {'type': 'boolean'}},
+                          'required': ['ready'], 'additionalProperties': False}
+                private_write(Path(directory) / 'schema.json', _json(schema))
+                progress('response')
+                events, _ = _process(_execution_args(directory, flags, model), directory, timeout,
+                    'Return only {"ready":true}. Do not use tools, files, web, or external services.',
+                    on_event=lambda event: None, first_response_timeout=min(first_response_timeout, timeout))
+                progress('completion_validation')
+                _validate_events(events)
+                if not (Path(directory) / 'result.json').is_file():
+                    raise ReviewFailure('RESULT_MISSING', 'completion_validation')
+                value = load_json(Path(directory) / 'result.json')
+                if not isinstance(value, dict) or set(value) != {'ready'} or value['ready'] is not True:
+                    raise ReviewFailure('INVALID_PROBE_RESULT', 'completion_validation')
+                report['checks'].append('model_probe')
+                report['model_execution_verified'] = True
+        report.update(status='ready', stage='completed')
+    except ReviewFailure as error:
+        report.update(code=error.code, stage=report['stage'] if error.stage == 'process' else error.stage)
+    except FileNotFoundError:
+        report['code'] = 'RESULT_MISSING' if report['stage'] == 'completion_validation' else 'CLI_NOT_FOUND'
+    except (ValueError, KeyError, TypeError, OSError, RecursionError):
+        report['code'] = 'INVALID_CLI_CONFIGURATION_OR_RESULT'
+    return report
+
+
 def _validate_events(text):
     from .ai_review import invalid_json_constant, _no_duplicates
     completed = False
@@ -250,12 +322,7 @@ def run_review(report, output, patterns, max_records=100, max_bytes=500000, time
         from .core import private_write
         private_write(Path(directory) / 'schema.json', _json(SCHEMA))
         flags = _configuration(directory)
-        args = ['codex'] + flags + ['exec', '--json', '--sandbox', 'read-only', '--ephemeral',
-                '--skip-git-repo-check', '--output-schema', str(Path(directory) / 'schema.json'),
-                '-o', str(Path(directory) / 'result.json')]
-        if model:
-            args += ['--model', model]
-        args += ['-']
+        args = _execution_args(directory, flags, model)
         events, _ = _process(args, directory, timeout, make_prompt(packet))
         _validate_events(events)
         result = load_json(Path(directory) / 'result.json')
@@ -270,16 +337,15 @@ class ReviewFailure(ValueError):
         super().__init__(code)
 
 
-def execute_packet(packet, timeout=300, model=None, progress=None):
+def execute_packet(packet, timeout=300, model=None, progress=None, first_response_timeout=60):
     """v8.5 bounded execution with safe diagnostics. No target client or API-key fallback."""
     from .ai_review import verify_packet, validate_result, load_json
     from .review_evidence import SCHEMA85
     from .core import private_write
     verify_packet(packet)
-    if packet.get('schema_version') != '8.5' or not 10 <= timeout <= 3600:
+    if packet.get('schema_version') != '8.5':
         raise ReviewFailure('INVALID_EXECUTION_SETTINGS', 'preflight')
-    if model is not None and (not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}', model) or model.lower() in ('pro','chatgpt-pro')):
-        raise ReviewFailure('INVALID_MODEL_ID', 'preflight')
+    _execution_settings(timeout, model, first_response_timeout)
     stage = 'preflight'
     def update(value, event=None):
         nonlocal stage
@@ -289,25 +355,26 @@ def execute_packet(packet, timeout=300, model=None, progress=None):
         with tempfile.TemporaryDirectory(prefix='passive-ai-') as directory:
             private_write(Path(directory)/'schema.json', _json(SCHEMA85))
             flags=_configuration(directory, update)
-            args=['codex']+flags+['exec','--json','--sandbox','read-only','--ephemeral','--skip-git-repo-check',
-                '--output-schema',str(Path(directory)/'schema.json'),'-o',str(Path(directory)/'result.json')]
-            if model: args+=['--model',model]
-            args+=['-'];update('submission')
+            args = _execution_args(directory, flags, model)
+            update('submission')
             def event(item):
                 if item['type'] in ('thread.started','turn.started'): update('response_wait', item)
                 elif item['item_type'] in ('agent_message','reasoning'): update('response', item)
                 else: update(stage, item)
             events,_=_process(args,directory,timeout,make_prompt(packet),on_event=event,
-                              first_response_timeout=min(60,timeout))
+                              first_response_timeout=min(first_response_timeout,timeout))
             update('completion_validation')
             _validate_events(events)
             update('citation_validation')
+            if not (Path(directory) / 'result.json').is_file():
+                raise ReviewFailure('RESULT_MISSING', 'citation_validation')
             result=validate_result(load_json(Path(directory)/'result.json'),packet)
     except ReviewFailure as error:
         # Map process failures to the actual last known stage, without echoing stderr.
         raise ReviewFailure(error.code, stage if error.stage=='process' else error.stage) from None
     except FileNotFoundError:
-        raise ReviewFailure('CLI_OR_RESULT_MISSING', stage) from None
+        code = 'RESULT_MISSING' if stage == 'citation_validation' else 'CLI_NOT_FOUND'
+        raise ReviewFailure(code, stage) from None
     except (ValueError,KeyError,TypeError,RecursionError,OSError):
         raise ReviewFailure('INVALID_COMPLETION_OR_RESULT', stage) from None
     return result, {'provider':'codex_chatgpt_login','status':'completed','model_execution_verified':True,
