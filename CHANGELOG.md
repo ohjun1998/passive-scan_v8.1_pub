@@ -1,3 +1,11 @@
+# v8.4.1 (2026-10-14)
+
+- 현재 v8.2 기반으로 AI 검토 실행 코드를 통합. 이전 v8.4 개발본 전체 복원은 아님.
+- ai_review.py prepare/import/codex, scope·마스킹·예산 제한 증거 패킷, strict JSON 검증, 별도 HTML/Markdown/JSON 및 실행 기록.
+- API 과다 노출·JS/HTML 비밀정보·오류 내부정보 프롬프트를 실제 make_prompt에 적용.
+- 기본 보고서 요청·분석 해시 manifest 추가. 수동 import와 CLI 실행 확인을 구분하고 사람 확정 요구.
+- [실행 안내](docs/V84.md), [전체 흐름](docs/FLOW_V84.md), [유스케이스](docs/USE_CASES.md).
+
 # 변경 이력
 
 ## 8.2.0

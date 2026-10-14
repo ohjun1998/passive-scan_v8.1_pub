@@ -1,6 +1,8 @@
 # 유스케이스와 기능 변경
 
-비교 기준: 8.1.1 → 8.2.0. **주황색/신규**는 추가한 기능, **파란색/개선**은 확장한 기능, **회색/유지**는 기존 기능입니다. 실선은 역할의 사용 관계, 점선은 포함하거나 선택적으로 확장하는 기능의 관계입니다.
+현재 비교 기준: 8.2.0 → 8.4.1. 아래 v8.2 그림은 이전 변경 기록이며, 최신 전체 흐름은 [시간순 전체 흐름도](FLOW_V84.md)를 참고하세요.
+
+이전 비교 기준: 8.1.1 → 8.2.0. **주황색/신규**는 추가한 기능, **파란색/개선**은 확장한 기능, **회색/유지**는 기존 기능입니다. 실선은 역할의 사용 관계, 점선은 포함하거나 선택적으로 확장하는 기능의 관계입니다.
 
 ## 전체 프로세스
 
@@ -142,6 +144,41 @@ flowchart TB
 
 ## 정보 노출 AI 검토 프롬프트 적용 패키지
 
-API 민감정보 과다 노출, JS/HTML 비밀정보 노출, 오류 내부정보 노출의 검토 지시문·코드 패치·적용 도구·검증 결과를 [적용 패키지](../updates/v8.4-disclosure-prompt/README_KR.md)에 보관합니다. 현재 main의 v8.2에는 AI 검토 파일이 없으므로 실행 프로그램에 적용된 기능이 아닙니다.
+API 민감정보 과다 노출, JS/HTML 비밀정보 노출, 오류 내부정보 노출의 검토 지시문·코드 패치·적용 도구·검증 결과를 [적용 패키지](../updates/v8.4-disclosure-prompt/README_KR.md)에 보관합니다. 이 패키지는 프롬프트 변경 당시의 보관 자료입니다. v8.4.1에서는 아래 실행 코드에 직접 통합했습니다.
 
 [패치 적용 이후의 전체 흐름 및 유스케이스](../updates/v8.4-disclosure-prompt/docs/PROMPT_DISCLOSURE_REVIEW.md)
+
+
+## v8.4.1 실행 코드 — 최신 유스케이스
+
+[실제 실행 안내](V84.md) · [도구·데이터를 포함한 시간순 전체 흐름](FLOW_V84.md)
+
+```mermaid
+flowchart TB
+    operator(("진단자"))
+    ai(("ChatGPT / Codex"))
+    subgraph system["Passive Scan v8.4.1"]
+        collect(["유지 · URL·요청·응답 수집"])
+        base(["개선 · 기본 보고서·해시 manifest"])
+        packet(["신규 · 범위·마스킹·예산 적용 패킷"])
+        review(["신규 · 정보 노출 AI 검토 연결"])
+        validate(["신규 · 결과 형식·증거 ID 검증"])
+        output(["신규 · 별도 AI 보고서·미검토 표시"])
+    end
+    operator --- collect
+    collect -.-> base
+    base -.-> packet
+    packet -.-> review
+    ai --- review
+    review -.-> validate
+    validate -.-> output
+    operator --- output
+    classDef added fill:#fff1df,stroke:#d77708,color:#663600
+    classDef changed fill:#e7f3ff,stroke:#2675bb,color:#163e65
+    classDef kept fill:#edf0f3,stroke:#798596,color:#344252
+    class packet,review,validate,output added
+    class base changed
+    class collect kept
+```
+
+역할은 시스템 경계 밖에 있습니다. AI 의견을 human confirmed 상태로 자동 반영하지 않으며, 진단자가 최종 검토합니다. 기존 수집·계정 비교·선택 조회 기능은 유지합니다.
