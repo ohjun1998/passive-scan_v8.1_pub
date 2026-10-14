@@ -32,5 +32,15 @@
     "Citation match does not validate claim meaning",
     "Human confirmation and reproduction remain separate"
   ],
-  "github_ci": "pending_after_upload"
+  "github_ci": {
+    "status": "success",
+    "run_id": 38561634289,
+    "tested_head": "9a316807491c25df1c79c632f3d07b5aa9895393",
+    "jobs": [
+      "Python 3.10",
+      "Python 3.12",
+      "Python 3.13",
+      "real Chromium"
+    ]
+  }
 }
