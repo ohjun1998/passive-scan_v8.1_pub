@@ -20,7 +20,7 @@ flowchart TB
     I --> J["git pull 또는 새 ZIP · 최신 코드 사용"]
 ```
 
-v8.4.1은 PR #1, v8.5.0은 PR #2로 main에 병합했습니다. v8.5.1은 `codex/v851-runtime-diagnostics` 브랜치에서 PR·CI를 거쳐 반영합니다. main의 버전·릴리스 안내 변경 시 배포 작업이 소스와 실제 Chromium을 검증하고, 검증한 커밋에 태그·ZIP·SHA256SUMS를 연결해 한계를 명시한 사전 배포를 만듭니다. 기존 릴리스는 덮어쓰지 않습니다.
+v8.4.1은 PR #1, v8.5.0은 PR #2로 main에 병합했습니다. v8.5.1은 `codex/v851-runtime-diagnostics` 브랜치의 PR #3에서 CI를 통과하고 main에 병합했습니다. main의 버전·릴리스 안내 변경 시 배포 작업이 소스와 실제 Chromium을 검증하고, 검증한 커밋에 태그·ZIP·SHA256SUMS를 연결해 한계를 명시한 사전 배포를 만듭니다. 기존 릴리스는 덮어쓰지 않습니다.
 
 사용자 요청에 따라 GitHub 변경과 관련된 대화는 `docs/chat-logs/날짜/`에 사용자 요청 원문과 응답·작업 요약으로 함께 보관합니다.
 

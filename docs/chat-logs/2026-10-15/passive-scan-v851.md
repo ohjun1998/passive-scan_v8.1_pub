@@ -33,3 +33,12 @@
 관련 문서: [변경 이력](../../../CHANGELOG.md) · [실행 안내](../../V851.md) · [남은 단계](../../REMAINING_STEPS.md)
 
 GitHub PR #3의 Python 3.10/3.12/3.13과 실제 Chromium CI가 모두 통과했다. 검증 실행: https://github.com/ohjun1998/passive-scan_v8.1_pub/actions/runs/38655191464 . 실제 모델 자동 완료 상태는 여전히 0/22다.
+
+## 최종 게시 확인
+
+- PR #3 병합 완료. 코드 커밋: 11e48aea10251bd49232af75aaa9973cee44e99a.
+- 병합 후 Python 세 버전·실제 Chromium CI 통과: https://github.com/ohjun1998/passive-scan_v8.1_pub/actions/runs/38655515846 .
+- v8.5.1 사전 배포 게시 완료 (한국 시간 08:41). 소스 ZIP·SHA256SUMS·검증 커밋 태그를 확인했다. 배포 작업의 단위 테스트·실제 Chromium·패키징·게시도 통과했다.
+- 릴리스: https://github.com/ohjun1998/passive-scan_v8.1_pub/releases/tag/v8.5.1 .
+- 22패킷·정책·평가 라벨·진단 결과를 담은 Passive_Scan_v8.5.1_Verification.zip을 별도 전달 자료로 준비했다.
+- 실제 Codex 첫 응답 시간 초과는 남아 있다. 자동 모델 검토 0/22·실제 모델 평가·새 재현을 완료로 표시하지 않는다.

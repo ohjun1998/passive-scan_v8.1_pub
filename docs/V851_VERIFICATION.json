@@ -59,14 +59,28 @@
   ],
   "github_ci": {
     "status": "success",
-    "run_id": 38655191464,
-    "tested_head": "60288e6f0698ff53a4770440bc963e9b6f82a0ba",
+    "run_id": 38655515846,
+    "tested_head": "11e48aea10251bd49232af75aaa9973cee44e99a",
     "jobs": [
       "Python 3.10",
       "Python 3.12",
       "Python 3.13",
       "real Chromium"
     ],
-    "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/actions/runs/38655191464"
+    "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/actions/runs/38655515846"
+  },
+  "pull_request_ci": {
+    "status": "success",
+    "run_id": 38655397603,
+    "tested_head": "a65113825aada0bc18c69390d19adac3ac87a579"
+  },
+  "release": {
+    "status": "published_prerelease",
+    "tag": "v8.5.1",
+    "commit": "11e48aea10251bd49232af75aaa9973cee44e99a",
+    "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/releases/tag/v8.5.1",
+    "workflow_run": 38655515805,
+    "source_zip_sha256": "1f86eaf79647ea0943a3be537874e2b3832dd7bc0b709cae42993e2cc0b690d6",
+    "published_at": "2026-10-14T23:41:13Z"
   }
 }
