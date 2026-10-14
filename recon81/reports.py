@@ -141,4 +141,11 @@ def generate(records, output, xlsx=False, ignore_fields=()):
         # Reserve privately before openpyxl replaces the content.
         private_write(target, '')
         wb.save(target)
+    # Stable source receipts bind AI packets to this report generation.
+    import hashlib
+    import uuid
+    files = {name: hashlib.sha256((output / name).read_bytes()).hexdigest()
+             for name in ('requests.jsonl', 'analysis.json')}
+    private_write(output / 'manifest.json', json.dumps({
+        'schema_version': '8.4', 'run_id': uuid.uuid4().hex, 'files': files}, indent=2))
     return len(records)

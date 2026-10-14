@@ -1,0 +1,26 @@
+{
+  "status": "passed",
+  "checks": [
+    "replacement_syntax",
+    "evidence_JSON_unchanged",
+    "offline_boundaries_preserved",
+    "three_categories_present",
+    "masking_and_false_positive_rules_present",
+    "fixed_prompt_matches_replacement",
+    "patch_applies_to_known_function_fixture",
+    "patch_preserves_surrounding_code",
+    "installer_dry_run_no_mutation",
+    "installer_output_matches_patch",
+    "backup_and_existing_docs_preserved",
+    "idempotent_reapply",
+    "changed_baseline_refused",
+    "missing_AI_source_refused_without_files"
+  ],
+  "check_count": 14,
+  "scope": "known_previous_make_prompt_function_fixture_only",
+  "full_project_regression": "not_run_latest_source_unavailable",
+  "AI_detection_quality": "not_tested_no_model_call",
+  "target_requests_sent": 0,
+  "project_applied": false,
+  "prompt_sha256": "ae666dca866cd5a361511e356846038076ce7a29f12b95a9b8f94239f319f4c4"
+}
