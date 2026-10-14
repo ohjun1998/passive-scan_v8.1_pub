@@ -127,7 +127,7 @@ def _validate_schema(value, schema):
 
 
 def verify_packet(packet):
-    if not isinstance(packet, dict) or packet.get('schema_version') != '8.4':
+    if not isinstance(packet, dict) or packet.get('schema_version') not in ('8.4','8.5'):
         raise ValueError('Unsupported packet version')
     content = dict(packet)
     claimed = content.pop('packet_id', None)
@@ -141,7 +141,11 @@ def verify_packet(packet):
 
 def validate_result(result, packet):
     verify_packet(packet)
-    _validate_schema(result, SCHEMA)
+    if packet.get('schema_version') == '8.5':
+        from .review_evidence import validate_citations
+        validate_citations(result, packet)
+    else:
+        _validate_schema(result, SCHEMA)
     if result['packet_id'] != packet['packet_id']:
         raise ValueError('Result is for a different packet')
     allowed = {r['observation_id'] for r in packet['evidence']}
@@ -265,11 +269,17 @@ def render_review(packet, result, output, execution):
     page = '<!doctype html><html lang="ko"><meta charset="utf-8"><title>AI 검토 보고서</title>' + \
            '<style>body{max-width:1000px;margin:40px auto;padding:20px;font:16px/1.65 sans-serif}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style>' + \
            '<h1>저장 증거 AI 검토 보고서</h1><pre>' + html.escape(markdown) + '</pre></html>'
+    if packet.get('schema_version') == '8.5':
+        from .review_evidence import validate_citations
+        execution = dict(execution, citation_validation='verified', citation_count=len(validate_citations(result, packet)))
+    else:
+        execution = dict(execution, citation_validation='legacy_unverified')
     execution = dict(execution, packet_id=packet['packet_id'], selected_evidence=selected,
                      reviewed_evidence=len(reviewed), unreviewed_evidence=selected-len(reviewed),
                      target_requests_sent=0, human_confirmation_required=True)
     return _publish(output, {'packet.json': _json(packet), 'ai_review.json': _json(result),
-                           'review.md': markdown, 'index.html': page, 'execution.json': _json(execution)})
+                           'review.md': markdown, 'index.html': page, 'execution.json': _json(execution),
+                           'citations.json': _json(validate_citations(result, packet) if packet.get('schema_version') == '8.5' else [])})
 
 
 def import_review(packet_path, result_path, output):

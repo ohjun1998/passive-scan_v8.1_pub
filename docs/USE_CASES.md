@@ -1,6 +1,8 @@
 # 유스케이스와 기능 변경
 
-현재 비교 기준: 8.2.0 → 8.4.1. 아래 v8.2 그림은 이전 변경 기록이며, 최신 전체 흐름은 [시간순 전체 흐름도](FLOW_V84.md)를 참고하세요.
+현재 비교 기준: 8.4.1 → 8.5.0. [최신 전체 흐름도](FLOW_V85.md)와 문서 아래의 v8.5 유스케이스를 참고하세요.
+
+이전 비교 기준: 8.2.0 → 8.4.1. 아래 v8.2 그림은 이전 변경 기록이며, 최신 전체 흐름은 [시간순 전체 흐름도](FLOW_V84.md)를 참고하세요.
 
 이전 비교 기준: 8.1.1 → 8.2.0. **주황색/신규**는 추가한 기능, **파란색/개선**은 확장한 기능, **회색/유지**는 기존 기능입니다. 실선은 역할의 사용 관계, 점선은 포함하거나 선택적으로 확장하는 기능의 관계입니다.
 
@@ -149,7 +151,7 @@ API 민감정보 과다 노출, JS/HTML 비밀정보 노출, 오류 내부정보
 [패치 적용 이후의 전체 흐름 및 유스케이스](../updates/v8.4-disclosure-prompt/docs/PROMPT_DISCLOSURE_REVIEW.md)
 
 
-## v8.4.1 실행 코드 — 최신 유스케이스
+## v8.4.1 실행 코드 — 이전 유스케이스
 
 [실제 실행 안내](V84.md) · [도구·데이터를 포함한 시간순 전체 흐름](FLOW_V84.md)
 
@@ -182,3 +184,38 @@ flowchart TB
 ```
 
 역할은 시스템 경계 밖에 있습니다. AI 의견을 human confirmed 상태로 자동 반영하지 않으며, 진단자가 최종 검토합니다. 기존 수집·계정 비교·선택 조회 기능은 유지합니다.
+
+## v8.5.0 — 최신 유스케이스
+
+비교 기준: v8.4.1 → v8.5.0. 주황/신규, 파랑/개선, 회색/유지입니다. 전체 시간순 흐름과 도구·데이터는 [v8.5 전체 흐름](FLOW_V85.md), 실행 명령은 [v8.5 안내](V85.md)를 참고하세요.
+
+```mermaid
+flowchart TB
+    analyst(("진단자"))
+    model(("ChatGPT / Codex"))
+    subgraph system["Passive Scan v8.5"]
+        collect(["유지 · URL·실제 HTTP 증거 수집"])
+        link(["신규 · 신원 응답·정책 출처 연결"])
+        split(["신규 · 자원별 분할·본문 fragment"])
+        run(["개선 · AI 검토·실패 기록·검증된 재개"])
+        cite(["신규 · 실제 위치·발췌 검증"])
+        coverage(["개선 · 진단 상태·미완료·정답 평가"])
+        report(["개선 · 별도 보고서·PDF 생성"])
+    end
+    analyst --- collect
+    collect -.-> link
+    link -.-> split
+    split -.-> run
+    model --- run
+    run -.-> cite
+    cite -.-> coverage
+    coverage -.-> report
+    classDef added fill:#fff1df,stroke:#d77708,color:#663600
+    classDef changed fill:#e7f3ff,stroke:#2675bb,color:#163e65
+    classDef kept fill:#edf0f3,stroke:#798596,color:#344252
+    class link,split,cite added
+    class run,coverage,report changed
+    class collect kept
+```
+
+계정 탐색·자동 로그인·AI 대상 재현·자동 finding 확정은 포함하지 않습니다. 인용 일치는 의미와 영향의 자동 검증이 아니며, 사람의 재현·최종 확인과 별도입니다. 기존 httpx 설정을 유지합니다.

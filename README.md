@@ -1,10 +1,12 @@
-# Passive Scan v8.4.1
+# Passive Scan v8.5.0
 
 URL 목록과 실제 HTTP 요청/응답을 함께 관리하는 버그바운티 정찰 도구입니다.
 
 원본 `ohjun1998/passive-scan_v8_pub`의 커밋 `56fe674eff848ba516dc1a743879e43c7cd3a12b`를 복사해 만든 별도 프로젝트입니다. 원본 저장소를 수정하거나 원본에서 스캔을 실행하지 않습니다.
 
-현재 버전은 **8.4.1**입니다. 저장 증거 기반 AI 검토의 prepare/import 및 선택적 Codex CLI 실행 경로와 정보 노출 검토 프롬프트를 추가했습니다. [v8.4.1 실행 안내](docs/V84.md) · [URL 수집부터 끝까지의 흐름도](docs/FLOW_V84.md) · [GitHub 과정](docs/GITHUB_PROCESS.md).
+현재 버전은 **8.5.0**입니다. [v8.5 실행 안내](docs/V85.md) · [최신 전체 흐름도](docs/FLOW_V85.md). 자원별 증거 분할·검증된 재개·단계별 실패 기록·신원/정책 연결·실제 인용 검사·커버리지·평가·PDF 내보내기를 추가했습니다.
+
+v8.4.1에서 저장 증거 기반 AI 검토의 prepare/import 및 선택적 Codex CLI 실행 경로와 정보 노출 검토 프롬프트를 추가했습니다. [v8.4.1 실행 안내](docs/V84.md) · [URL 수집부터 끝까지의 흐름도](docs/FLOW_V84.md) · [GitHub 과정](docs/GITHUB_PROCESS.md).
 
 v8.2에서 추가한 기능으로, 계정·조직·기능 라벨, 증거 기반 후보 우선순위, 계정별 응답 비교, 기능 흐름과 진단 커버리지 대시보드를 추가했습니다. JS 변경분과 저장된 OpenAPI/HTML form도 분석합니다. 수집과 분석 기능, **httpx 20개 워커, 각각 `-rl 10 -t 5`**는 유지합니다.
 

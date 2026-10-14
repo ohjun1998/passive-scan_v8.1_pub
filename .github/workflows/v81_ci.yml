@@ -1,4 +1,4 @@
-name: v8.4.1 offline verification
+name: v8.5 offline verification
 on:
   push:
     branches: [main]
@@ -17,7 +17,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: python -m pip install -r requirements-v81.txt
+      - run: python -m pip install -r requirements-v81.txt -r requirements-report.txt
       - name: Unit and integration tests (no target traffic)
         run: python -m unittest discover -s tests -v
       - name: Python and shell syntax
@@ -31,6 +31,7 @@ jobs:
           python request_inventory.py report --xlsx
           python ai_review.py prepare --report reports/requests --scope example.test --output reports/ai-prepared
           python review_queue.py build --scope-file examples/scope.txt
+          python examples/v85/demo.py --output reports/v85-demo
   browser-fixture:
     runs-on: ubuntu-latest
     timeout-minutes: 10
