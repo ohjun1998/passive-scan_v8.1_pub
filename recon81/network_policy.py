@@ -15,14 +15,32 @@ class PolicyDenied(ValueError):
     pass
 
 
+def decoded_path(url):
+    path = urlsplit(url).path or '/'
+    for _ in range(3):
+        decoded = unquote(path)
+        if decoded == path:
+            break
+        path = decoded
+    return path
+
+
 class NetworkPolicy:
-    def __init__(self, scope, reviewed_paths=(), allow_user_actions=False, allowed_ports=(80,443,8080,8443)):
+    def __init__(self, scope, reviewed_paths=(), allow_user_actions=False, allowed_ports=(80,443,8080,8443), graphql_urls=()):
         self.scope = scope if isinstance(scope, Scope) else Scope(scope)
         self.reviewed_paths = set(reviewed_paths)
         if any(not p.startswith('/') or '?' in p or '#' in p for p in self.reviewed_paths):
             raise ValueError('Reviewed paths must be exact absolute paths')
         self.allow_user_actions = allow_user_actions
         self.allowed_ports = set(allowed_ports)
+        self.graphql_urls = frozenset(graphql_urls)
+        if any(self.reason(url) for url in self.graphql_urls):
+            raise ValueError('GraphQL endpoints must be exact scoped URLs')
+
+    def allows_graphql(self, url, headers, data):
+        from .graphql_policy import read_only_graphql
+        content_type = next((v for k,v in headers.items() if k.lower()=='content-type'), '')
+        return url in self.graphql_urls and read_only_graphql(data, content_type)
 
     def reason(self, url, method='GET', manual=False):
         try:
@@ -33,12 +51,7 @@ class NetworkPolicy:
                 return 'unreviewed_port'
             if any(ord(c) < 33 for c in url) or len(url) > 4096:
                 return 'invalid_or_excessive_url'
-            path = parsed.path or '/'
-            for _ in range(3):
-                decoded = unquote(path)
-                if decoded == path:
-                    break
-                path = decoded
+            path = decoded_path(url)
             if '\\' in path or any(x in ('.', '..') for x in path.split('/')):
                 return 'ambiguous_path'
             reviewed = manual and path in self.reviewed_paths
@@ -63,7 +76,7 @@ class NetworkPolicy:
 
     @staticmethod
     def is_costly(url):
-        path=urlsplit(url).path
+        path=decoded_path(url)
         if path.lower().endswith(('.js','.css','.png','.jpg','.jpeg','.svg','.woff','.woff2','.ico')): return False
         return bool(COSTLY.search(path))
 

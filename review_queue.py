@@ -31,7 +31,8 @@ def executable(record,policy,read_post_urls=()):
                 try:
                     from graphql import parse
                     parse(query,max_tokens=1000)
-                    if read_only_graphql(data): return True,'bounded_graphql_query',data
+                    captured_headers={h['name']:h['value'] for h in record['headers']}
+                    if policy.allows_graphql(record['url'],captured_headers,data): return True,'bounded_graphql_query',data
                     return False,'graphql_query_only',None
                 except Exception:
                     if 'graphql' in urlsplit(record['url']).path.lower(): return False,'invalid_graphql',None
@@ -67,8 +68,12 @@ def execute(inventory,plan,ids,client,policy,actor,tenant='',headers=None,read_p
         allowed,reason,data=executable(record,policy,read_post_urls)
         if not allowed: raise ValueError('Selection requires manual review: '+reason)
         outgoing={k:get_header(record['headers'],k) for k in ('Accept','Accept-Language','Content-Type') if get_header(record['headers'],k)}
-        outgoing.update(headers or {})
+        for key,value in (headers or {}).items():
+            outgoing = {k:v for k,v in outgoing.items() if k.lower()!=key.lower()}
+            outgoing[key] = value
         if any(MASK in str(v) for v in outgoing.values()): raise ValueError('Masked headers cannot be transmitted')
+        if reason=='bounded_graphql_query' and not policy.allows_graphql(record['url'],outgoing,data):
+            raise ValueError('Runtime GraphQL headers differ from the approved envelope')
         selections.append((record,data,outgoing))
     count=0; skipped=0; stopped=''; capture=uuid.uuid4().hex
     for original,data,outgoing in selections:
@@ -91,6 +96,7 @@ def main(argv=None):
     for name in ('build','execute'):
         cmd=sub.add_parser(name); cmd.add_argument('--db',type=Path,default=Path('reports/request_inventory.sqlite3'))
         cmd.add_argument('--scope-file',type=Path,required=True); cmd.add_argument('--queue',type=Path,default=Path('reports/review_queue.json'))
+        cmd.add_argument('--graphql-url',action='append',default=[],help='Exact reviewed GraphQL endpoint; JSON query operations only')
         if name=='execute':
             cmd.add_argument('--id',action='append',required=True)
             cmd.add_argument('--actor',required=True); cmd.add_argument('--tenant',default='')
@@ -102,7 +108,7 @@ def main(argv=None):
             cmd.add_argument('--active',action='store_true')
     args=p.parse_args(argv)
     if not args.db.is_file(): p.error('Inventory DB does not exist')
-    policy=NetworkPolicy(scope_from_file(args.scope_file))
+    policy=NetworkPolicy(scope_from_file(args.scope_file),graphql_urls=args.graphql_url)
     try:
         with Inventory(args.db) as inventory:
             if args.command=='build':

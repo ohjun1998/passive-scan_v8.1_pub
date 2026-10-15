@@ -5,7 +5,8 @@ from pathlib import Path
 from urllib.parse import urlencode, urljoin
 from .core import (MASK, SECRET, MAX_BODY, normalize_record, packet, read_limited,
                    xml_root, sanitize_value, normalize_body, sanitize_headers,
-                   header_pairs, get_header, digest, safe_url, now, redact_text, response_identity)
+                   header_pairs, get_header, digest, safe_url, now, redact_text, response_identity,
+                   normalize_resource_headers)
 
 
 def har_body(request):
@@ -54,15 +55,15 @@ def reidentify(record):
     identity_body = {k: v for k, v in record['body'].items() if k not in ('size_bytes', 'reason')}
     record['request_id'] = digest([record['url'], record['method'], record['headers'], identity_body, record['observed']])
     record['observation_id'] = digest([record['request_id'], response_identity(record['response']), record['source'], record.get('origin_url')])
-    if record.get('context') or record.get('asset'):
+    if record.get('context') or record.get('asset') or record.get('probe'):
         from .context import attach_context
-        attach_context(record,record['context'])
+        attach_context(record,record.get('context'))
     return record
 
 
 def native_record(item, include_text=False):
     """Re-sanitize native JSONL; never trust imported redaction flags or hashes."""
-    def body_input(body, ct):
+    def decode_body(body, ct):
         if not isinstance(body, dict):
             raise ValueError('Native body must be an object')
         kind = body.get('kind')
@@ -84,8 +85,18 @@ def native_record(item, include_text=False):
         if kind == 'omitted':
             return {'kind': 'omitted', 'text': '', 'fields': [str(x) for x in body.get('fields', [])], 'complete': False, 'reason': 'imported_omitted_body'}
         raise ValueError('Unsupported native body kind')
+    def body_input(body, ct):
+        normalized = decode_body(body, ct)
+        # An imported partial capture cannot become complete merely because its
+        # retained prefix is syntactically valid JSON or happens to be empty.
+        if body.get('complete') is not True:
+            normalized['complete'] = False
+            normalized.setdefault('reason', 'source_body_incomplete')
+        return normalized
     observed = bool(item.get('observed', False))
-    result = normalize_record(item['url'], item['method'], item.get('headers', []), source=str(item.get('source', 'native')), observed=observed, body_fields=(item.get('body') or {}).get('fields', []), timestamp=item.get('timestamp'), origin_url=item.get('origin_url'))
+    result = normalize_record(item['url'], item['method'], item.get('headers', []), source=str(item.get('source', 'native')), observed=observed, body_fields=(item.get('body') or {}).get('fields', []), timestamp=item.get('timestamp'), origin_url=item.get('origin_url'), resource_headers=normalize_resource_headers(item.get('resource_headers', [])))
+    if result['timestamp_quality'] == 'captured' and item.get('timestamp_quality') in ('ingestion_time', 'unparsed_ingestion_fallback', 'assumed_utc'):
+        result['timestamp_quality'] = item['timestamp_quality']
     if observed:
         result['body'] = body_input(item['body'], get_header(result['headers'], 'content-type'))
     if item.get('response'):
@@ -94,7 +105,7 @@ def native_record(item, include_text=False):
         result['response'] = {'status': int(resp.get('status', 0)), 'headers': headers, 'body': body_input(resp['body'], get_header(headers, 'content-type'))}
     from .context import clean_context
     result['context']=clean_context(item.get('context'))
-    for key in ('schema','asset'):
+    for key in ('schema','asset','probe'):
         if key in item:
             from .discovery import clean_metadata
             result[key]=clean_metadata(item[key])

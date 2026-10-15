@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 from recon81.core import private_write
 from recon81.guard import RunGuard
 from recon81.network_policy import NetworkPolicy, scope_from_file
-from guarded_probe import supervise
+from guarded_probe import protected_supervise
 
 
 def scope_regex(policy):
@@ -21,17 +21,10 @@ def scope_regex(policy):
     return r'(?i)^https?://(?:'+'|'.join(hosts)+r')(?::(?:'+ports+r'))?(?:/|$)'
 
 
-def exclusions():
-    # Encode each ASCII letter alternative too, to exclude encoded action names before crawl.
-    actions=['logout','signout','delete','remove','revoke','destroy','reset','activate','verify','confirm','send','trigger','execute','run','job','restart','shutdown','reboot','purge','flush','migrate','rebuild','restore','transfer','checkout','payment','refund','unsubscribe']
-    encoded=[]
-    for word in actions:
-        encoded.append(''.join('(?:'+c+'|%'+format(ord(c),'02x')+')' for c in word))
-    return r'(?i)(?:[/_.-](?:'+'|'.join(encoded)+r')(?:[/_.?&-]|$)|[?&](?:password|token|api[_-]?key|secret|session|csrf|xsrf|action|cmd|command|op|operation|task)=|%25|%2f|%5c)'
-
-
 def command(binary, seeds, policy):
-    return [binary,'-list',str(seeds),'-d','2','-c','2','-p','1','-rl','2','-retry','0','-timeout','8','-crawl-duration','120s','-mrs','1048576','-jc','-fs','fqdn','-cs',scope_regex(policy),'-cos',exclusions(),'-jsonl','-silent']
+    # Host filtering reduces discovery noise. The gateway applies the complete
+    # shared policy, avoiding a second, inconsistent URL safety regex.
+    return [binary,'-list',str(seeds),'-d','2','-c','2','-p','1','-rl','2','-retry','0','-timeout','8','-crawl-duration','120s','-mrs','1048576','-jc','-fs','fqdn','-cs',scope_regex(policy),'-jsonl','-silent']
 
 
 def main():
@@ -56,9 +49,9 @@ def main():
     if not seeds: return 0
     guard=RunGuard(args.state,interval=0)
     try:
-        status=supervise(command(args.katana,ready,policy),raw,guard,policy,deadline=150,kind='katana')
+        status=protected_supervise(command(args.katana,ready,policy),raw,guard,policy,deadline=150,kind='katana',selected_urls=seeds,deferred_path=args.output.with_suffix('.deferred.txt'))
         found=set()
-        for line in raw.read_text().splitlines():
+        for line in raw.read_text().splitlines() if raw.exists() else ():
             try:
                 record=json.loads(line)
                 url=(record.get('request') or {}).get('endpoint')

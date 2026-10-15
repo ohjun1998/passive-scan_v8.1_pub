@@ -16,7 +16,7 @@ for dir in results/*_js_files_"${GROUP_SUFFIX}"; do
   python3 js_asset_cache.py reuse --cache "$cache" --mapping "$mapping" --analyzer-version "$version" >> "$output"
   for js_file in "$dir"/*.js; do
     [ -f "$js_file" ] || continue
-    if [ -f "$cache" ]; then
+    if [ -f "$cache" ] || [ -f "$cache.sqlite3" ]; then
       if [[ $(python3 js_asset_cache.py needs-analysis --cache "$cache" --source-file "$js_file" --analyzer-version "$version") == false ]]; then continue; fi
       extracted="$dir/.extracted.jsonl"
       : > "$extracted"; chmod 600 "$extracted"

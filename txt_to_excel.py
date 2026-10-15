@@ -3,13 +3,14 @@ import os
 import glob
 import re
 import json
-import posixpath
 import sqlite3
 import shutil
-import time
 from datetime import datetime
-from urllib.parse import urlparse, parse_qsl
-from recon81.core import safe_url
+from urllib.parse import urlparse
+from pathlib import Path
+from recon81.core import safe_url, Scope, Inventory, normalize_record, private_write
+from recon81.pipeline import (function_category as get_function_category, get_function_priority,
+    ingest_saved, url_projection, mappings)
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -17,13 +18,6 @@ from openpyxl.utils import get_column_letter
 def escape_formula(value):
     if isinstance(value, str) and value.startswith(('=', '+', '-', '@')): return "'" + value
     return value
-
-def make_absolute(url, domain):
-    if url.startswith(('http://', 'https://')): absolute = url
-    elif url.startswith('//'): absolute = 'https:' + url
-    elif url.startswith('/'): absolute = f'https://{domain}{url}'
-    else: absolute = f'https://{domain}/{url}'
-    return safe_url(absolute)
 
 def get_status_color(status):
     status_str = str(status)
@@ -44,55 +38,6 @@ def get_status_priority(status):
     if s.startswith('3'): return 4
     if s.startswith('4'): return 5
     return 6
-
-def get_safe_domain(target):
-    return "wild_" + target[2:] if target.startswith('*.') else target
-
-def normalize_dynamic_path(path):
-    p = re.sub(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}', '{UUID}', path)
-    p = re.sub(r'\b\d{3,}\b', '{ID}', p)
-    p = re.sub(r'\b[a-zA-Z0-9]{10,}\b', '{HASH}', p)
-    return p
-
-# === [업그레이드된] 엔드포인트 5가지 기능 분류 로직 ===
-def get_function_category(url):
-    url_lower = url.lower()
-    parsed = urlparse(url_lower)
-    path = parsed.path
-    query = parsed.query
-
-    # 1순위: 관리자/내부망(Admin/internal) - 국내 실정(bo, cms) 및 인프라 반영
-    if any(kw in path for kw in ['/admin', '/internal', '/manage', '/bo', '/backoffice', '/cms', '/system', '/dashboard', '/console', '/debug', '/test', '/api-docs', '/swagger']):
-        return "🛠️ 관리자/내부(Admin)"
-        
-    # 2순위: 인증(Auth) - 최신 인증(토큰, MFA) 방식 반영
-    if any(kw in path or kw in query for kw in ['login', 'register', 'reset-password', 'verify', 'oauth', 'sso', 'session', 'signin', 'signup', 'auth', 'token', 'mfa', 'otp', '2fa', 'password', 'pwd', 'recover', 'saml']):
-        return "🔑 인증(Auth)"
-        
-    # 3순위: 자금/결제(Money) - 포인트, 마일리지 등 비즈니스 로직 취약점 타겟 반영
-    if any(kw in path or kw in query for kw in ['transfer', 'checkout', 'refund', 'coupon', 'invoice', 'withdraw', 'payment', 'pay', 'billing', 'point', 'mileage', 'cart', 'wallet', 'balance', 'transaction']):
-        return "💸 자금/결제(Money)"
-        
-    # 4순위: 파일 처리(File handling) - LFI/SSRF 유발 경로 반영
-    if any(kw in path or kw in query for kw in ['upload', 'download', 'export', 'import', 'avatar', 'file', 'attachment', 'document', 'pdf', 'csv', 'excel', 'report', 'load', 'read']):
-        return "📁 파일 처리(File)"
-        
-    # 5순위: 객체 접근(Object access) - 국내 개발 문화(idx, seq, no) 반영
-    query_dict = dict(parse_qsl(query, keep_blank_values=True))
-    query_keys = [k.lower() for k in query_dict.keys()]
-    if any(kw in key for key in query_keys for kw in ['id', 'no', 'num', 'seq', 'idx', 'key', 'uuid']):
-        return "📦 객체 접근(Object)"
-        
-    return "기타(Others)"
-
-def get_function_priority(cat):
-    if cat == "🛠️ 관리자/내부(Admin)": return 1
-    if cat == "💸 자금/결제(Money)": return 2
-    if cat == "🔑 인증(Auth)": return 3
-    if cat == "📁 파일 처리(File)": return 4
-    if cat == "📦 객체 접근(Object)": return 5
-    return 6
-# =======================================================
 
 regex_sensitive_exts = re.compile(r'\.(env|bak|swp|old|sql|sqlite|db|dump|log|config|properties|yml|yaml|ini)$', re.IGNORECASE)
 regex_sensitive_paths = re.compile(r'/(admin|administrator|wp-admin|manage|phpmyadmin|server-status|server-info|actuator|swagger-ui|graphql)($|/)', re.IGNORECASE)
@@ -132,7 +77,7 @@ def build_advanced_excel_report():
     db_path = 'reports/recon_history.db'
     prev_db_path = 'previous_report/recon_history.db'
 
-    if os.path.exists(prev_db_path):
+    if os.path.exists(prev_db_path) and not os.path.exists(db_path):
         shutil.copy(prev_db_path, db_path)
 
     conn = sqlite3.connect(db_path)
@@ -146,149 +91,61 @@ def build_advanced_excel_report():
     cursor.execute('CREATE TABLE IF NOT EXISTS js_cache (url_hash TEXT PRIMARY KEY, url TEXT NOT NULL, downloaded_at REAL NOT NULL)')
     if 'metadata' not in {row[1] for row in cursor.execute('PRAGMA table_info(js_cache)')}:
         cursor.execute("ALTER TABLE js_cache ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'")
-    from recon81.assets import sanitize_entry
-    for cache_path in glob.glob('results/js_download_cache_*.jsonl'):
-        with open(cache_path, encoding='utf-8') as cache_stream:
-            for line in cache_stream:
-                try:
-                    item = sanitize_entry(json.loads(line))
-                    cursor.execute('INSERT INTO js_cache(url_hash,url,downloaded_at,metadata) VALUES (?,?,?,?) ON CONFLICT(url_hash) DO UPDATE SET url=excluded.url,downloaded_at=excluded.downloaded_at,metadata=excluded.metadata WHERE excluded.downloaded_at>=js_cache.downloaded_at', (item['url_hash'], safe_url(item['url']), float(item['downloaded_at']),json.dumps(item,ensure_ascii=False)))
-                    cursor.execute('INSERT OR IGNORE INTO downloaded_js VALUES (?)', (safe_url(item['url']),))
-                except (ValueError, KeyError, TypeError):
-                    continue
+    from recon81.assets import sanitize_entry, entries
+    cache_errors = []
+    cache_paths = {Path(str(p).removesuffix('.sqlite3')) for pattern in ('js_download_cache_*.jsonl','js_download_cache_*.jsonl.sqlite3') for p in Path('results').glob(pattern)}
+    for cache_path in sorted(cache_paths):
+        try:
+            cached_entries = entries(cache_path).values()
+        except (ValueError, OSError, sqlite3.Error):
+            cache_errors.append({'file': cache_path.name, 'reason': 'invalid_cache'}); continue
+        for raw_item in cached_entries:
+            try:
+                item = sanitize_entry(raw_item)
+                cursor.execute('INSERT INTO js_cache(url_hash,url,downloaded_at,metadata) VALUES (?,?,?,?) ON CONFLICT(url_hash) DO UPDATE SET url=excluded.url,downloaded_at=excluded.downloaded_at,metadata=excluded.metadata WHERE excluded.downloaded_at>=js_cache.downloaded_at', (item['url_hash'], safe_url(item['url']), float(item['downloaded_at']),json.dumps(item,ensure_ascii=False)))
+                cursor.execute('INSERT OR IGNORE INTO downloaded_js VALUES (?)', (safe_url(item['url']),))
+            except (ValueError, KeyError, TypeError):
+                cache_errors.append({'file': cache_path.name, 'reason': 'invalid_cache_entry'})
     conn.commit()
 
-    cursor.execute("SELECT target FROM target_stats")
-    db_targets = [row[0] for row in cursor.fetchall()]
-    all_targets = list(set(targets + db_targets))
-
-    target_map = {get_safe_domain(t): t for t in all_targets}
-    matrix_data = {raw_target: {} for raw_target in all_targets}
-    signature_counts = {}
+    scope = Scope(targets)
+    existing_urls_cache = {safe_url(row[0]) for row in cursor.execute('SELECT url FROM master_urls') if scope.allows(row[0])}
+    with Inventory('reports/request_inventory.sqlite3') as inventory:
+        ingestion = ingest_saved('results', scope, inventory, history_files=['previous_report/master_url_db.txt'])
+        known_urls = {r['url'] for r in inventory.records()}
+        # One-time migration of the legacy URL history; known methods/evidence are
+        # retained, and absent methods remain UNKNOWN rather than manufactured GETs.
+        for url in sorted(existing_urls_cache - known_urls):
+            inventory.add(normalize_record(url, 'UNKNOWN', source='legacy_history', observed=False))
+        inventory.conn.commit()
+        records = [r for r in inventory.records() if scope.allows(r['url'])]
+        record_ids = {r['observation_id'] for r in records}
+        capture_events = [event for event in inventory.capture_events() if event['observation_id'] in record_ids]
+    matrix_data = url_projection(records, scope.patterns)
+    for url_map in matrix_data.values():
+        for url, data in url_map.items(): data['is_new'] = url not in existing_urls_cache
+    js_url_converter = mappings('results', ingestion)
+    ingestion['cache_errors'] = cache_errors
+    ingestion['partial'] = bool(ingestion['parse_errors'] or cache_errors)
+    private_write('reports/ingestion_summary.json', json.dumps(ingestion, ensure_ascii=False, indent=2))
 
     junk_extensions = ('.png', '.jpg', '.jpeg', '.gif', '.svg', '.css', '.woff', '.woff2', '.ico', '.eot', '.ttf', '.mp4')
     blacklist_words = ['logout', 'signout', 'delete', 'remove', 'revoke', 'destroy']
     high_value_kw = ['jenkins', 'grafana', 'kibana', 'elastic', 'admin', 'dashboard']
-
-    js_url_converter = {}
-    for mf in glob.glob('results/*_js_mapping.txt'):
-        try:
-            with open(mf, 'r', encoding='utf-8', errors='ignore') as f:
-                for line in f:
-                    if '\t' in line:
-                        s, o = line.strip().split('\t', 1)
-                        js_url_converter[s] = o
-        except: pass
-
-    all_today_raw_urls = []
-    temp_file_records = []
-
-    for file_path in glob.glob('results/*.*'):
-        filename = os.path.basename(file_path).lower()
-        match = re.match(r'^(.*)_(linkfinder|gau|waybackurls|katana|crawl)(?:_[0-9]{2})?\.txt$', filename)
-        if not match: continue
-
-        safe_domain = match.group(1)
-        if safe_domain not in target_map: continue
-
-        raw_target = target_map[safe_domain]
-        is_wildcard = raw_target.startswith('*.')
-        base_domain = raw_target[2:] if is_wildcard else raw_target
-
-        if 'linkfinder' in filename or 'jsluice' in filename: source_tool = 'LinkFinder'
-        elif 'trufflehog' in filename: source_tool = 'TruffleHog'
-        elif 'waybackurls' in filename: source_tool = 'Waybackurls'
-        elif 'gau' in filename: source_tool = 'GAU'
-        elif 'katana' in filename: source_tool = 'Katana'
-        elif 'crawl' in filename: source_tool = 'Crawler'
-        else: continue
-
-        try:
-            with open(file_path, 'r', errors='ignore') as f:
-                for line in f:
-                    line_str = line.strip()
-                    if not line_str or line_str.startswith('#'): continue
-                    line_str = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', line_str)
-                    if not line_str: continue
-
-                    if '\t' in line_str: js_file, raw_url = line_str.split('\t', 1)
-                    else: js_file, raw_url = "Passive Archive", line_str
-
-                    if js_file in js_url_converter: js_file = js_url_converter[js_file]
-
-                    abs_url = make_absolute(raw_url, base_domain)
-                    parsed_netloc = urlparse(abs_url).netloc.split(':')[0]
-
-                    if is_wildcard:
-                        if not (parsed_netloc == base_domain or parsed_netloc.endswith('.' + base_domain)): continue
-                    else:
-                        if parsed_netloc != base_domain: continue
-
-                    if urlparse(abs_url).path.lower().endswith(junk_extensions): continue
-
-                    all_today_raw_urls.append(abs_url)
-                    temp_file_records.append((raw_target, abs_url, source_tool, js_file))
-        except: pass
-
-    existing_urls_cache = set()
-    all_today_raw_urls = list(set(all_today_raw_urls))
-
-    for idx in range(0, len(all_today_raw_urls), 500):
-        chunk = all_today_raw_urls[idx:idx+500]
-        placeholders = ",".join(["?"] * len(chunk))
-        cursor.execute(f"SELECT url FROM master_urls WHERE url IN ({placeholders})", chunk)
-        for row in cursor.fetchall(): existing_urls_cache.add(row[0])
-
-    for raw_target, abs_url, source_tool, js_file in temp_file_records:
-        parsed_for_sig = urlparse(abs_url)
-        query_keys = tuple(sorted([k for k, v in parse_qsl(parsed_for_sig.query, keep_blank_values=True)]))
-        norm_path = normalize_dynamic_path(parsed_for_sig.path)
-        signature = (parsed_for_sig.netloc, posixpath.dirname(norm_path), posixpath.splitext(norm_path)[1], query_keys)
-
-        if abs_url not in matrix_data[raw_target]:
-            if signature_counts.get(signature, 0) >= 5: continue
-            signature_counts[signature] = signature_counts.get(signature, 0) + 1
-
-            is_new = abs_url not in existing_urls_cache
-            matrix_data[raw_target][abs_url] = {"tools": set(), "files": set(), "is_new": is_new}
-
-        matrix_data[raw_target][abs_url]["tools"].add(source_tool)
-        if source_tool in ['LinkFinder', 'TruffleHog']:
-            matrix_data[raw_target][abs_url]["files"].add(js_file)
-
-    status_codes = {}
-    server_info = {}
-    tech_info = {}
-    for res_file in glob.glob('results/httpx_results_*.json') + glob.glob('strike_out/httpx_results_*.json'):
-        try:
-            with open(res_file, 'r', errors='ignore') as f:
-                for line in f:
-                    if not line.strip(): continue
-                    data = json.loads(line.strip())
-                    url = safe_url(data.get('url') or '')
-                    status_codes[url] = data.get('status_code', 'Dead')
-
-                    server_info[url] = data.get('webserver', '-')
-                    techs = data.get('tech')
-                    if isinstance(techs, list): tech_info[url] = ", ".join(techs)
-                    else: tech_info[url] = str(techs) if techs else '-'
-        except: pass
+    status_codes, server_info, tech_info = {}, {}, {}
+    for record in sorted(records, key=lambda r: (r.get('timestamp', ''), r['observation_id'])):
+        if record.get('response'):
+            url = record['url']
+            status_codes[url] = record['response'].get('status', 'Dead')
+            probe = record.get('probe') or {}
+            server_info[url] = probe.get('server', '-')
+            tech_info[url] = ', '.join(probe.get('tech') or []) or '-'
 
     dork_results = run_duckduckgo_dorking(targets)
     for entry in dork_results:
         if entry.get('url'): entry['url'] = safe_url(entry['url'])
 
     now_str = datetime.now().strftime("%Y%m%d_%H%M")
-
-    postman_collection = {
-        "event": [{"listen": "prerequest", "script": {"type": "text/javascript", "exec": ['throw new Error("검토 전용 컬렉션: 자동 재전송 차단");']}}],
-        "info": {
-            "name": f"🎯 Passive Recon API Collection ({now_str})",
-            "description": "과거 아카이브를 통해 추출한 도메인별 API 및 엔드포인트 명세서입니다.",
-            "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-        },
-        "item": []
-    }
 
     wb = Workbook()
     font_header, fill_header = Font(name='Malgun Gothic', bold=True, color='FFFFFF'), PatternFill(start_color='2F3542', end_color='2F3542', fill_type='solid')
@@ -340,7 +197,6 @@ def build_advanced_excel_report():
         if not url_map and not has_db and domain_dork_count == 0: continue
 
         sheet_title = re.sub(r'[\\/\?\*\:\[\]]', '_', raw_target)[:30]
-        postman_folder = {"name": raw_target, "item": []}
 
         today_passive_count = len(url_map)
         domain_new_count = sum(1 for data in url_map.values() if data.get("is_new", False))
@@ -350,17 +206,11 @@ def build_advanced_excel_report():
         jsluice_new = sum(1 for data in url_map.values() if 'LinkFinder' in data["tools"] and data.get("is_new", False))
         trufflehog_count = sum(1 for data in url_map.values() if 'TruffleHog' in data["tools"])
 
-        cursor.execute("SELECT passive_tot, jsluice_tot, katana_tot FROM target_stats WHERE target = ?", (raw_target,))
-        row = cursor.fetchone()
-        if row:
-            db_passive_tot, db_jsluice_tot, db_katana_tot = row
-            new_passive_tot = db_passive_tot + domain_new_count
-            new_jsluice_tot = db_jsluice_tot + jsluice_new
-            new_katana_tot = db_katana_tot + domain_katana_count
-        else:
-            new_passive_tot = today_passive_count
-            new_jsluice_tot = today_jsluice_total
-            new_katana_tot = domain_katana_count
+        # Counts derive from the same cumulative inventory, so rerunning an
+        # exporter cannot inflate historical crawler totals.
+        new_passive_tot = today_passive_count
+        new_jsluice_tot = today_jsluice_total
+        new_katana_tot = domain_katana_count
 
         cursor.execute("INSERT OR REPLACE INTO target_stats (target, passive_tot, jsluice_tot, katana_tot) VALUES (?, ?, ?, ?)", 
                        (raw_target, new_passive_tot, new_jsluice_tot, new_katana_tot))
@@ -392,7 +242,7 @@ def build_advanced_excel_report():
             elif f_cat == "💸 자금/결제(Money)": count_money += 1
             elif f_cat == "🛠️ 관리자/내부(Admin)": count_admin += 1
 
-        current_subdomains = {urlparse(u).netloc for u in url_map.keys() if urlparse(u).netloc}
+        current_subdomains = {urlparse(u).hostname for u in url_map.keys() if urlparse(u).hostname}
         new_subdomains = current_subdomains - previous_subdomains
         global_current_subdomains.update(current_subdomains)
 
@@ -455,13 +305,13 @@ def build_advanced_excel_report():
         dash_idx += 1
 
         if today_passive_count > 0:
-            domain_sheets_data.append((sheet_title, url_map, new_subdomains, postman_folder))
+            domain_sheets_data.append((sheet_title, url_map, new_subdomains))
 
     for raw_target, url_map in matrix_data.items():
         for url, data in url_map.items():
             is_blacklist = any(b in url.lower() for b in blacklist_words)
             current_status = "Skipped(위험)" if is_blacklist else ( "Static(생략)" if urlparse(url).path.lower().endswith(junk_extensions) else status_codes.get(url, '미프로빙') )
-            is_new_subdomain = (urlparse(url).netloc in new_subdomains) if 'new_subdomains' in locals() else False
+            is_new_subdomain = urlparse(url).hostname in global_new_subdomains
             sub_mark = "🌟 신규" if is_new_subdomain else "-"
             c_server, c_tech = server_info.get(url, '-'), tech_info.get(url, '-')
             tools_str, files_str = ", ".join(sorted(list(data["tools"]))), ", ".join(sorted(list(data["files"]))) if data["files"] else "-"
@@ -584,7 +434,7 @@ def build_advanced_excel_report():
     # =========================================================================
     # 6. 나머지 도메인별 상세 시트들 생성 (기능 5개 그룹으로 최상단 정렬 분리)
     # =========================================================================
-    for sheet_title, url_map, new_subdomains, postman_folder in domain_sheets_data:
+    for sheet_title, url_map, new_subdomains in domain_sheets_data:
         ws = wb.create_sheet(title=sheet_title)
         ws.append(["🔙 대시보드로 돌아가기 (Return to Dashboard)"])
         # === [수정] 10개 열에 맞춰 병합 ===
@@ -604,7 +454,7 @@ def build_advanced_excel_report():
         sorted_urls = sorted(url_map.items(), key=lambda x: (
             get_function_priority(get_function_category(x[0])), # 1순위: 기능
             not x[1].get("is_new", False),                      # 2순위: 신규 여부
-            get_status_priority(status_codes.get(x[0], '미프로빙') if any(b not in x[0].lower() for b in blacklist_words) else 'Skipped(위험)'), # 3순위: 응답 상태
+            get_status_priority(status_codes.get(x[0], '미프로빙') if not any(b in x[0].lower() for b in blacklist_words) else 'Skipped(위험)'), # 3순위: 응답 상태
             x[0]
         ))
 
@@ -614,12 +464,8 @@ def build_advanced_excel_report():
             is_new_mark = "🆕 NEW" if data.get("is_new", False) else "-"
             is_blacklist = any(b in url.lower() for b in blacklist_words)
 
-            if not is_blacklist:
-                parsed_pm = urlparse(url)
-                postman_folder["item"].append({"name": parsed_pm.path if parsed_pm.path else "/", "request": {"method": "UNKNOWN", "header": [], "url": {"raw": url, "protocol": parsed_pm.scheme, "host": parsed_pm.netloc.split('.'), "path": [p for p in parsed_pm.path.split('/') if p], "query": [{"key": k, "value": v} for k, v in parse_qsl(parsed_pm.query, keep_blank_values=True)]}}})
-
             current_status = "Skipped(위험)" if is_blacklist else ( "Static(생략)" if urlparse(url).path.lower().endswith(junk_extensions) else status_codes.get(url, '미프로빙') )
-            is_new_subdomain = (urlparse(url).netloc in new_subdomains) and bool(previous_subdomains)
+            is_new_subdomain = (urlparse(url).hostname in new_subdomains) and bool(previous_subdomains)
             sub_mark = "🌟 신규" if is_new_subdomain else "-"
             c_server, c_tech = server_info.get(url, '-'), tech_info.get(url, '-')
             
@@ -645,7 +491,6 @@ def build_advanced_excel_report():
                 elif c in [4, 7, 8, 9, 10]: cell.alignment = align_left # 한 칸씩 밀린 텍스트 좌측 정렬 처리
                 else: cell.alignment = align_center
 
-        if postman_folder["item"]: postman_collection["item"].append(postman_folder)
 
     if dash_idx > 2:
         g_sub_tot, g_sub_new = len(global_current_subdomains), len(global_new_subdomains)
@@ -676,14 +521,13 @@ def build_advanced_excel_report():
 
     if all_today_discovered_urls:
         cursor.executemany("INSERT OR IGNORE INTO master_urls (url) VALUES (?)", [(u,) for u in list(set(all_today_discovered_urls))])
-        today_subs = {urlparse(u).netloc.split(':')[0] for u in all_today_discovered_urls if urlparse(u).netloc}
+        today_subs = {urlparse(u).hostname for u in all_today_discovered_urls if urlparse(u).hostname}
         if today_subs: cursor.executemany("INSERT OR IGNORE INTO historical_subdomains (subdomain) VALUES (?)", [(s,) for s in today_subs])
         conn.commit()
     conn.close()
 
-    if global_new_subdomains:
-        with open('reports/new_subdomains.txt', 'w', encoding='utf-8') as f:
-            for sub in sorted(list(global_new_subdomains)): f.write(sub + '\n')
+    private_write('reports/new_subdomains.txt', ''.join(sub + '\n' for sub in sorted(global_new_subdomains)))
+    private_write('reports/master_url_db.txt', ''.join(url + '\n' for url in sorted({r['url'] for r in records})))
 
     # =========================================================================
     # 열 너비(Width) 자동 맞춤 조정 (변경된 헤더명 기준 매핑)
@@ -705,21 +549,20 @@ def build_advanced_excel_report():
             else: sheet.column_dimensions[col_letter].width = 18
 
     ws_dash.column_dimensions['B'].width = 35
-    from recon81.core import Inventory, Scope
-    from recon81.reports import add_excel_sheets,add_analysis_sheets
+    from recon81.reports import add_excel_sheets, add_analysis_sheets, generate, postman
     from recon81.analysis import analyze
-    if os.path.isfile('reports/request_inventory.sqlite3'):
-        with Inventory('reports/request_inventory.sqlite3') as inventory:
-            scope = Scope(targets)
-            records=[r for r in inventory.records() if scope.allows(r['url'])]
-            add_excel_sheets(wb,records)
-            enriched,analysis=analyze(records)
-            add_analysis_sheets(wb,enriched,analysis)
+    add_excel_sheets(wb, records)
+    enriched, analysis = analyze(records, capture_events=capture_events)
+    add_analysis_sheets(wb, enriched, analysis)
+    # Native HTML/Excel/Postman and legacy rich sheets share the exact same
+    # authoritative observations, including history and deferred endpoints.
+    generate(records, 'reports/requests', xlsx=True, capture_events=capture_events)
+    postman_collection = postman(records)
     add_secret_findings(wb, js_url_converter)
     wb.save(f'reports/passive_recon_report_{now_str}.xlsx')
     with open(f'reports/postman_collection_{now_str}.json', 'w', encoding='utf-8') as f: json.dump(postman_collection, f, indent=4, ensure_ascii=False)
 
-    print(f"[+] Postman API 및 엑셀 리포트 사출 완료!", flush=True)
+    print(f"[+] 공통 Inventory {len(records)}건으로 HTML·Excel·Postman 생성 완료 (파싱 오류 {ingestion['parse_errors']}건)", flush=True)
 
 if __name__ == '__main__':
     build_advanced_excel_report()

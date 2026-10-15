@@ -1,0 +1,140 @@
+{
+  "version": "8.6.0",
+  "verification_date_kst": "2026-10-15",
+  "baseline_commit": "d5ef504383265fafab975d26be9ce8787b6d3da4",
+  "local_tests": {
+    "command": "python -m unittest discover -s tests -q",
+    "discovered": 260,
+    "passed": 256,
+    "skipped": 4,
+    "failures": 0,
+    "errors": 0,
+    "elapsed_seconds": 15.437,
+    "optional_chromium": 2,
+    "optional_httpx_katana": 2
+  },
+  "regression_tests_added": 95,
+  "syntax_checks": [
+    "compileall",
+    "bash -n",
+    "git diff --check",
+    "workflow YAML parse"
+  ],
+  "review_changes": {
+    "dispatch_gateway_and_atomic_budgets": "implemented",
+    "reviewed_graphql_endpoints": "implemented",
+    "report_generation_recovery": "implemented",
+    "full_inventory_and_cache_retention": "implemented",
+    "body_completeness_and_error_evidence": "implemented",
+    "signed_url_and_metadata_redaction": "implemented",
+    "ai_publication_and_manifest_validation": "implemented",
+    "shared_inventory_pipeline": "implemented",
+    "capture_event_history": "implemented",
+    "comparison_oriented_packets": "implemented",
+    "crash_released_cross_platform_locks": "implemented"
+  },
+  "performance_checks": {
+    "source_hashes_for_512_fragments": {
+      "before": 512,
+      "after": 1
+    },
+    "openapi_shared_reference_fixture": {
+      "input_bytes": 1884,
+      "before_recursive_calls": 70217,
+      "after_budgeted_schema_nodes": 7,
+      "unique_fields": 1,
+      "complete": true,
+      "after_elapsed_seconds": 0.000815,
+      "timing_is_synthetic_not_a_throughput_guarantee": true
+    },
+    "response_parsing_for_4_observations_6_comparisons": 4,
+    "asset_metadata_update_extraction_rows_touched": 0
+  },
+  "saved_evidence": {
+    "observations": 77,
+    "previous_packets_preserved": 22,
+    "new_comparison_packets": 36,
+    "complete_saved_group_packets": 31,
+    "partial_saved_group_packets": 5,
+    "reference_labels": 50,
+    "all_label_ids_preserved": true,
+    "completed_model_packets": 0
+  },
+  "cli_probe_before_catalog_refresh": {
+    "schema_version": "8.5.2",
+    "status": "failed",
+    "stage": "startup",
+    "checks": [
+      "cli",
+      "authentication",
+      "capabilities",
+      "mcp_configuration"
+    ],
+    "probe_requested": true,
+    "model_execution_verified": false,
+    "subscription_plan_verified": false,
+    "target_requests_sent": 0,
+    "evidence_sent": false,
+    "requested_model": null,
+    "cli_version": "0.162.1",
+    "code": "CLI_EVENT_TIMEOUT",
+    "diagnostic": {
+      "execution_events_received": 0,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "model_response_seen": false,
+      "elapsed_seconds": 30.0
+    }
+  },
+  "cli_probe_after_catalog_refresh": {
+    "schema_version": "8.5.2",
+    "status": "failed",
+    "stage": "startup",
+    "checks": [
+      "cli",
+      "authentication",
+      "capabilities",
+      "mcp_configuration"
+    ],
+    "probe_requested": true,
+    "model_execution_verified": false,
+    "subscription_plan_verified": false,
+    "target_requests_sent": 0,
+    "evidence_sent": false,
+    "requested_model": null,
+    "cli_version": "0.162.1",
+    "code": "CLI_EVENT_TIMEOUT",
+    "diagnostic": {
+      "execution_events_received": 0,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "model_response_seen": false,
+      "elapsed_seconds": 30.0
+    }
+  },
+  "catalog_diagnostic": {
+    "cli_version": "0.162.1",
+    "cache_version_before": "0.159.2",
+    "cache_version_after": "0.162.1",
+    "bundled_catalog_status": "completed",
+    "remote_catalog_status": "completed",
+    "remote_catalog_elapsed_seconds": 1.202,
+    "root_cause_confirmed": false
+  },
+  "model_quality_measured": false,
+  "chatgpt_login_cli_sufficient": true,
+  "pro_subscription_check_required": false,
+  "github_ci": {
+    "status": "pending"
+  },
+  "limitations": [
+    "Actual model startup remains blocked; no semantic quality claim",
+    "Controlled binaries must honor supported proxy options; gateway is not an OS network sandbox",
+    "Gateway verifies upstream TLS; proxied transport metadata is marked protected_gateway",
+    "Report directory swap is recoverable with journal, not a crash-atomic directory exchange",
+    "Full analysis and Excel still load selected records; HTML views are bounded",
+    "Legacy lost capture chronology is explicitly migrated as a summary",
+    "Aggregate AI output has an explicit 16MiB budget",
+    "GraphQL cost bound covers known syntax, not unknown resolver implementation"
+  ]
+}

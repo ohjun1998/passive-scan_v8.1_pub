@@ -133,13 +133,14 @@ class AIReviewTests(unittest.TestCase):
         self.assertEqual(2, done.returncode); self.assertNotIn('NEVER_SAVE', done.stderr)
     def test_mock_codex_completion_and_auth_guard(self):
         # Fake CLI verifies adapter wiring only, never model detection quality.
-        def fake(args, cwd, timeout, prompt=None):
+        def fake(args, cwd, timeout, prompt=None, **kwargs):
             if args[1:3] == ['login', 'status']: return '', 'Logged in using ChatGPT'
             if args[1:3] == ['features', 'list']: return 'shell_tool stable true\napps experimental true', ''
             if args[1:3] == ['mcp', 'list']: return '[{"name":"server"}]', ''
             self.assertIn('features.shell_tool=false', args)
             self.assertIn('mcp_servers.server.enabled=false', args)
             self.assertIn('--ephemeral', args)
+            self.assertTrue(callable(kwargs['on_event']))
             self.assertIn('read-only', args)
             packet = json.loads(prompt.split('UNTRUSTED_EVIDENCE_JSON\n')[1])
             Path(args[args.index('-o')+1]).write_text(json.dumps(result(packet)))

@@ -15,7 +15,7 @@ from recon81.guard import RunGuard, ProtectedHTTP, GuardStopped, retry_after_sec
 from download_js import download, cached_keys
 from crawl_safe import crawl
 from guarded_probe import command, supervise
-from guarded_crawl import scope_regex, exclusions
+from guarded_crawl import scope_regex
 from safe_screenshots import BrowserGate, read_only_graphql, select_pages
 
 
@@ -67,7 +67,6 @@ class ProtectionTests(unittest.TestCase):
         self.assertTrue(rx.search('https://example.test/a'))
         self.assertFalse(rx.search('https://example.test.attacker.test/a'))
         self.assertFalse(rx.search('https://example.test@outside.test/a'))
-        self.assertTrue(re.search(exclusions(),'https://example.test/%64%65%6c%65%74%65/1'))
 
     def test_overload_stops_new_requests(self):
         with self.assertRaises(GuardStopped): self.guard.feedback(429,retry_after='60')
@@ -226,9 +225,10 @@ class ProtectionTests(unittest.TestCase):
         client.fetch.assert_not_called()
 
     def test_browser_gate_permits_read_graphql_and_no_auto_redirect_bypass(self):
+        self.policy=NetworkPolicy(['example.test'],graphql_urls=['https://example.test/graphql'])
         client=Mock(); client.fetch.return_value={'status':200,'headers':{'Content-Type':'application/json'},'body':b'{"data":{}}','complete':True}
         gate=BrowserGate(self.policy,client)
-        request=Mock(url='https://example.test/graphql',method='POST',post_data_buffer=b'{"query":"{ me { id } }"}',resource_type='xhr',headers={})
+        request=Mock(url='https://example.test/graphql',method='POST',post_data_buffer=b'{"query":"{ me { id } }"}',resource_type='xhr',headers={'Content-Type':'application/json'})
         route=Mock(request=request); gate.handle(route)
         self.assertTrue(client.fetch.call_args.kwargs['approved_read_post'])
         route.fulfill.assert_called_once()

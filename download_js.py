@@ -9,36 +9,33 @@ from pathlib import Path
 from recon81.core import Scope, private_write, safe_url
 from recon81.network_policy import NetworkPolicy
 from recon81.guard import RunGuard, ProtectedHTTP, GuardStopped
-from recon81.assets import entries,write_entries,reusable
+from recon81.assets import AssetCache, cache_db_path, reusable
 
 LIMIT = 2*1024*1024
 
 
 def cached_keys(path, ttl=7*86400):
-    if not path.exists():
+    if not Path(path).exists() and not cache_db_path(path).exists():
         return set()
-    result=set()
-    for line in path.read_text(encoding='utf-8').splitlines():
-        try:
-            item=json.loads(line)
-            if 0<=time.time()-float(item['downloaded_at']) < ttl:
-                result.add(item['url_hash'])
-        except (ValueError,KeyError,TypeError):
-            continue
-    return result
+    with AssetCache(path) as store:
+        return store.fresh_keys(time.time(), ttl)
 
 
 def download(urls, client, policy, output, mapping, cache, max_files=100, min_free_bytes=256*1024*1024,analyzer_version=None,revalidate=False):
+    with AssetCache(cache) as store:
+        return _download(urls, client, policy, output, mapping, store, max_files, min_free_bytes, analyzer_version, revalidate)
+
+
+def _download(urls, client, policy, output, mapping, store, max_files, min_free_bytes, analyzer_version, revalidate):
     output.mkdir(parents=True,exist_ok=True)
-    known=cached_keys(cache)
-    metadata=entries(cache)
+    known=store.fresh_keys(time.time())
     rows=[]
     downloaded=0
     for url in sorted(set(urls)):
         key=hashlib.sha256(url.encode()).hexdigest()
         if policy.reason(url) or not url.split('?',1)[0].lower().endswith('.js'):
             continue
-        previous=metadata.get(key,{})
+        previous=store.get(key, include_records=False) or {}
         cached=analyzer_version is None or reusable(previous,analyzer_version)
         if key in known and cached and not revalidate:
             if analyzer_version: rows.append(key+'.js\t'+safe_url(url))
@@ -58,7 +55,7 @@ def download(urls, client, policy, output, mapping, cache, max_files=100, min_fr
                 break
             raise
         if response['status']==304 and cached and previous:
-            previous['downloaded_at']=time.time(); metadata[key]=previous; write_entries(cache,metadata)
+            previous['downloaded_at']=time.time(); store.put_download(previous)
             rows.append(key+'.js\t'+safe_url(url)); continue
         if response['status']!=200 or not response['complete']:
             continue
@@ -69,12 +66,11 @@ def download(urls, client, policy, output, mapping, cache, max_files=100, min_fr
         target.chmod(0o600)
         rows.append(name+'\t'+safe_url(url))
         item={'url_hash':key,'url':safe_url(url),'downloaded_at':time.time(),'content_hash':hashlib.sha256(response['body']).hexdigest()}
-        if previous.get('analysis'): item['analysis']=previous['analysis']
         headers=response.get('headers') or {}
         for field,header in [('etag','etag'),('last_modified','last-modified')]:
             value=next((v for k,v in headers.items() if k.lower()==header),'')
             if value: item[field]=value
-        metadata[key]=item; write_entries(cache,metadata)
+        store.put_download(item)
         known.add(key)
         downloaded+=1
     private_write(mapping,'\n'.join(rows)+ ('\n' if rows else ''))

@@ -1,5 +1,12 @@
 """Standalone local reports. No remote scripts, fonts or telemetry."""
 import json
+import hashlib
+import html
+import os
+import re
+import shutil
+import tempfile
+import uuid
 from collections import Counter
 from pathlib import Path
 from .core import private_write
@@ -101,25 +108,59 @@ def add_analysis_sheets(workbook,records,analysis):
             for c in row: c.alignment=Alignment(vertical='top',wrap_text=True)
 
 
-def generate(records, output, xlsx=False, ignore_fields=()):
+def _file_digest(path):
+    digest=hashlib.sha256()
+    with open(path,'rb') as stream:
+        for chunk in iter(lambda:stream.read(65536),b''): digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _private_chunks(path, chunks):
+    path=Path(path); path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+    fd, temporary=tempfile.mkstemp(dir=path.parent)
+    try:
+        with os.fdopen(fd,'w',encoding='utf-8') as stream:
+            for chunk in chunks: stream.write(chunk)
+        os.replace(temporary,path); path.chmod(0o600)
+    finally:
+        if os.path.exists(temporary): os.unlink(temporary)
+
+
+def _private_json(path, value):
+    _private_chunks(path,json.JSONEncoder(ensure_ascii=False,indent=2).iterencode(value))
+
+
+def _private_jsonl(path, records):
+    def chunks():
+        encoder=json.JSONEncoder(ensure_ascii=False)
+        for record in records:
+            yield from encoder.iterencode(record)
+            yield '\n'
+    _private_chunks(path,chunks())
+
+
+def _oversized_evidence_page(records):
+    links=''.join('<li><a href="../evidence/'+r['observation_id']+'.json">'+html.escape(r['method']+' '+r['url'][:512])+'</a></li>' for r in records)
+    return """<!doctype html><html lang="ko"><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'"><title>큰 증거 파일</title><h1>큰 증거 파일</h1><p>이 관찰은 HTML 표시 예산을 초과합니다. 전체 증거를 생략 없이 JSON으로 열 수 있습니다. 전체 비교는 analysis.json에 있습니다.</p><a href="../index.html">전체 보고서</a><ul>"""+links+'</ul></html>'
+
+
+def _generate(records, output, xlsx=False, ignore_fields=(), capture_events=None, resource_headers=()):
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
     from .analysis import analyze
-    from .dashboard import HTML as dashboard
     from .core import Scope
     from .network_policy import NetworkPolicy
     from urllib.parse import urlsplit
     from review_queue import build
-    enriched,analysis=analyze(records,ignore_fields)
+    enriched,analysis=analyze(records,ignore_fields,capture_events=capture_events,resource_headers=resource_headers)
     enriched=[dict(r,review_candidates=review_candidates(r)) for r in enriched]
-    private_write(output / 'requests.jsonl', ''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in enriched))
-    private_write(output / 'postman_review.json', json.dumps(postman(records), ensure_ascii=False, indent=2))
-    private_write(output/'analysis.json',json.dumps(analysis,ensure_ascii=False,indent=2))
+    _private_jsonl(output / 'requests.jsonl', enriched)
+    _private_json(output / 'postman_review.json', postman(records))
+    _private_json(output/'analysis.json', analysis)
     hosts={urlsplit(r['url']).hostname for r in records if urlsplit(r['url']).hostname}
     queue=build(records,NetworkPolicy(Scope(hosts))) if hosts else {'schema_version':'8.2','items':[]}
-    private_write(output/'review_queue.json',json.dumps(queue,ensure_ascii=False,indent=2))
-    data = json.dumps({'records':enriched,'analysis':analysis}, ensure_ascii=False).replace('<', '\\u003c').replace('&', '\\u0026')
-    private_write(output / 'index.html', dashboard.replace('__DATA__', data))
+    _private_json(output/'review_queue.json',queue)
+    _write_dashboards(output, enriched, analysis, ignore_fields, resource_headers, capture_events)
     for r in enriched:
         private_write(output / 'evidence' / (r['observation_id'] + '.json'), json.dumps(r, ensure_ascii=False, indent=2))
     if xlsx:
@@ -141,11 +182,235 @@ def generate(records, output, xlsx=False, ignore_fields=()):
         # Reserve privately before openpyxl replaces the content.
         private_write(target, '')
         wb.save(target)
-    # Stable source receipts bind AI packets to this report generation.
-    import hashlib
-    import uuid
-    files = {name: hashlib.sha256((output / name).read_bytes()).hexdigest()
-             for name in ('requests.jsonl', 'analysis.json')}
+    if capture_events is not None:
+        _private_jsonl(output / 'capture_events.jsonl', capture_events)
+    files = {path.relative_to(output).as_posix(): _file_digest(path)
+             for path in sorted(output.rglob('*')) if path.is_file()}
     private_write(output / 'manifest.json', json.dumps({
-        'schema_version': '8.4', 'run_id': uuid.uuid4().hex, 'files': files}, indent=2))
+        'schema_version': '8.6', 'owner': 'passive-scan-report', 'run_id': uuid.uuid4().hex, 'files': files}, indent=2))
     return len(records)
+
+
+DASHBOARD_MAX_RECORDS = 1000
+DASHBOARD_MAX_BYTES = 8 * 1024 * 1024
+
+
+def _dashboard_json(records, analysis):
+    return json.dumps({'records': records, 'analysis': analysis}, ensure_ascii=False).replace('<', '\\u003c').replace('&', '\\u0026')
+
+
+def _write_dashboards(output, records, analysis, ignore_fields, resource_headers, capture_events=None):
+    """Large reports retain complete JSON evidence and bounded static HTML pages."""
+    record_sizes = {r['observation_id']:len(json.dumps(r,ensure_ascii=False).encode()) for r in records}
+    budget = max(1024, DASHBOARD_MAX_BYTES-len(HTML.encode())-2048)
+    if len(records) <= DASHBOARD_MAX_RECORDS and sum(record_sizes.values()) <= budget:
+        data = _dashboard_json(records, analysis)
+        if len(data.encode()) <= budget:
+            private_write(output / 'index.html', HTML.replace('__DATA__', data))
+            return
+    from .analysis import analyze
+    events_by_id={}
+    for event in capture_events or ():
+        events_by_id.setdefault(event['observation_id'],[]).append(event)
+    def page_analysis(selected):
+        events=None if capture_events is None else [event for record in selected for event in events_by_id.get(record['observation_id'],[])]
+        return analyze(selected,ignore_fields,capture_events=events,resource_headers=resource_headers)
+    chunks = []; chunk = []; size = 0
+    # Leave space for derived comparison/coverage metadata in each page.
+    for record in records:
+        record_size = record_sizes[record['observation_id']]
+        if chunk and (len(chunk) >= DASHBOARD_MAX_RECORDS or size + record_size > DASHBOARD_MAX_BYTES // 2):
+            chunks.append(chunk); chunk = []; size = 0
+        chunk.append(record); size += record_size
+    if chunk: chunks.append(chunk)
+    links = []
+    pending=list(chunks); index=0
+    while pending:
+        chunk=pending.pop(0)
+        subset, details = page_analysis(chunk)
+        data=_dashboard_json(subset, details)
+        if len(data.encode())>budget and len(chunk)>1:
+            middle=len(chunk)//2; pending[0:0]=[chunk[:middle],chunk[middle:]]; continue
+        index+=1; filename = 'pages/requests-' + str(index) + '.html'
+        if len(data.encode())>budget:
+            content=_oversized_evidence_page(chunk)
+        else:
+            content = HTML.replace('__DATA__', data)
+            content = content.replace('<main>', '<main><p><a href="../index.html">전체 보고서</a> · 분할 페이지의 비교·흐름은 이 페이지의 관찰 범위입니다. 전체 분석은 analysis.json에 보존됩니다.</p>', 1)
+        private_write(output / filename, content)
+        links.append((filename, '요청 ' + str(index) + ' · ' + str(len(chunk)) + '개 기록'))
+    # Preserve cross-page account comparisons as bounded, self-contained views.
+    by_id = {r['observation_id']: r for r in records}
+    pair_chunks = []; pair_chunk = []; pair_ids = set(); pair_size = 0
+    for pair in analysis['comparisons']:
+        ids = {pair['left_id'], pair['right_id']}
+        additional = sum(record_sizes[key] for key in ids - pair_ids)
+        if pair_chunk and (len(pair_chunk) >= 30 or pair_size + additional > DASHBOARD_MAX_BYTES // 2):
+            pair_chunks.append(pair_chunk); pair_chunk = []; pair_ids = set(); pair_size = 0
+            additional = sum(record_sizes[key] for key in ids)
+        pair_chunk.append(pair); pair_ids.update(ids); pair_size += additional
+    if pair_chunk: pair_chunks.append(pair_chunk)
+    pending=list(pair_chunks); index=0
+    while pending:
+        pairs=pending.pop(0)
+        ids = {p[key] for p in pairs for key in ('left_id', 'right_id')}
+        selected=[by_id[key] for key in sorted(ids)]
+        subset, details = page_analysis(selected)
+        details['comparisons'] = pairs
+        data=_dashboard_json(subset, details)
+        if len(data.encode())>budget and len(pairs)>1:
+            middle=len(pairs)//2; pending[0:0]=[pairs[:middle],pairs[middle:]]; continue
+        index+=1; filename = 'pages/comparisons-' + str(index) + '.html'
+        content = (_oversized_evidence_page(selected) if len(data.encode())>budget else HTML.replace('__DATA__',data).replace('<main>', '<main><p><a href="../index.html">전체 보고서</a> · 전체 분석에서 선택한 계정 비교입니다.</p>', 1))
+        private_write(output / filename, content)
+        links.append((filename, '계정 비교 ' + str(index) + ' · ' + str(len(pairs)) + '쌍'))
+    rows = ''.join('<li><a href="' + html.escape(path, quote=True) + '">' + html.escape(label) + '</a></li>' for path, label in links)
+    private_write(output / 'index.html', '<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; base-uri \'none\'; form-action \'none\'"><title>Passive Scan · 분할 보고서</title><style>body{max-width:850px;margin:4em auto;padding:0 1em;font:17px/1.7 system-ui}li{margin:.5em 0}</style><h1>Passive Scan · 분할 보고서</h1><p>전체 ' + str(len(records)) + '개 기록을 페이지로 나누었습니다. 모든 증거와 전체 비교·흐름은 아래 파일에 보존됩니다. 분할 페이지는 검토 변경 JSON을 각각 내보낼 수 있습니다.</p><p><a href="requests.jsonl">전체 요청 JSONL</a> · <a href="analysis.json">전체 분석 JSON</a> · <a href="manifest.json">파일 영수증</a></p><ul>' + rows + '</ul></html>')
+
+
+def _owned_report_files(output):
+    manifest_path = output / 'manifest.json'
+    if not manifest_path.is_file() or manifest_path.is_symlink():
+        return set()
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+        files = manifest['files']
+        if not isinstance(files, dict): return set()
+        owned = set()
+        for name, receipt in files.items():
+            path = Path(name)
+            if (not isinstance(name, str) or path.is_absolute() or '..' in path.parts or not re.fullmatch('[0-9a-f]{64}', str(receipt))):
+                raise ValueError('Invalid report ownership manifest')
+            if not (name in {'requests.jsonl','analysis.json','postman_review.json','review_queue.json','index.html','request_inventory.xlsx','capture_events.jsonl'} or re.fullmatch(r'evidence/[0-9a-f]{64}\.json',name) or re.fullmatch(r'pages/(?:requests|comparisons)-[0-9]+\.html',name)):
+                raise ValueError('Unknown report-owned artifact')
+            owned.add(name)
+        if manifest.get('owner') == 'passive-scan-report':
+            return owned | {'manifest.json'}
+        # Adopt known v8.4 reports only after validating their source receipts.
+        if manifest.get('schema_version') == '8.4' and set(files) == {'requests.jsonl', 'analysis.json'}:
+            if any(not (output / name).is_file() or _file_digest(output / name) != receipt for name, receipt in files.items()):
+                raise ValueError('Legacy report receipts do not match')
+            owned.update(name for name in ('index.html', 'postman_review.json', 'review_queue.json', 'request_inventory.xlsx') if (output / name).is_file())
+            evidence = output / 'evidence'
+            if evidence.is_symlink(): raise ValueError('Report evidence must not be a symlink')
+            if evidence.is_dir():
+                for path in evidence.iterdir():
+                    if path.is_file() and re.fullmatch(r'[0-9a-f]{64}\.json', path.name):
+                        record = json.loads(path.read_text(encoding='utf-8'))
+                        if record.get('observation_id') == path.stem:
+                            owned.add(path.relative_to(output).as_posix())
+            return owned | {'manifest.json'}
+    except (KeyError, TypeError, json.JSONDecodeError) as error:
+        raise ValueError('Invalid report ownership manifest') from error
+    return set()
+
+
+def _safe_report_path(output, name):
+    target = output / name
+    for path in (target, *target.parents):
+        if path == output.parent: break
+        if path.is_symlink(): raise ValueError('Report paths must not be symlinks')
+    return target
+
+
+def _carry_unowned(source, staging, owned, prefix=''):
+    for item in source.iterdir():
+        name=prefix+item.name
+        if name in owned: continue
+        target=staging/item.name
+        if item.is_symlink():
+            os.symlink(os.readlink(item),target)
+        elif item.is_dir():
+            target.mkdir(exist_ok=True,mode=0o700)
+            _carry_unowned(item,target,owned,name+'/')
+        elif item.is_file():
+            try: os.link(item,target)
+            except OSError: shutil.copy2(item,target)
+        else:
+            raise ValueError('Report contains an unsupported unrelated file; use a fresh output directory')
+
+
+def _recover_report(output, journal):
+    if not journal.exists(): return
+    if journal.is_symlink(): raise ValueError('Invalid report recovery journal')
+    value=json.loads(journal.read_text(encoding='utf-8'))
+    if value.get('owner')!='passive-scan-report' or value.get('output')!=str(output):
+        raise ValueError('Invalid report recovery journal')
+    stage=Path(value['staging']); backup=Path(value['backup'])
+    for path,label in ((stage,'stage'),(backup,'backup')):
+        if path.parent!=output.parent or not path.name.startswith('.'+output.name+'-'+label+'-') or path.is_symlink():
+            raise ValueError('Invalid report recovery path')
+    if output.is_symlink(): raise ValueError('Report output must not be a symlink')
+    if output.exists():
+        current=None
+        try: current=json.loads((output/'manifest.json').read_text(encoding='utf-8')).get('run_id')
+        except (OSError,ValueError): pass
+        if current==value.get('run_id'):
+            if backup.exists(): shutil.rmtree(backup)
+        elif backup.exists():
+            raise ValueError('Report recovery conflict; previous output remains in backup')
+        # Otherwise the old directory was never moved, or was already restored.
+    elif backup.exists():
+        os.replace(backup,output)
+    else:
+        raise ValueError('Report recovery requires the saved output directory')
+    if stage.exists(): shutil.rmtree(stage)
+    journal.unlink()
+
+
+def _acquire_report_lock(fd):
+    from .locking import acquire_file_lock
+    acquire_file_lock(fd,'Report generation is already in progress')
+
+
+def generate(records, output, xlsx=False, ignore_fields=(), capture_events=None, resource_headers=()):
+    """Publish complete generations under a writer lock, with crash recovery.
+
+    Directory replacement takes two renames on portable filesystems. The journal
+    restores the old generation after an interrupted swap; it is not an atomic
+    directory exchange. No mixed generation is published and backups survive
+    failed recovery. Unrelated files are carried into the prepared directory.
+    """
+    output=Path(output).absolute()
+    if output.is_symlink() or (output.exists() and not output.is_dir()):
+        raise ValueError('Report output must be a directory, not a symlink')
+    output.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+    lock_path=output.parent/('.'+output.name+'.report.lock')
+    journal=output.parent/('.'+output.name+'.report-journal.json')
+    if lock_path.is_symlink(): raise ValueError('Report lock must not be a symlink')
+    fd=os.open(lock_path,os.O_CREAT|os.O_RDWR|getattr(os,'O_NOFOLLOW',0),0o600)
+    staging=None
+    try:
+        _acquire_report_lock(fd)
+        _recover_report(output,journal)
+        if capture_events is not None: capture_events=list(capture_events)
+        staging=Path(tempfile.mkdtemp(prefix='.'+output.name+'-stage-',dir=output.parent))
+        count=_generate(records,staging,xlsx,ignore_fields,capture_events,resource_headers)
+        if not output.exists():
+            os.replace(staging,output)
+            return count
+        owned=_owned_report_files(output)
+        new_files={path.relative_to(staging).as_posix() for path in staging.rglob('*') if path.is_file()}
+        for name in owned|new_files:
+            target=_safe_report_path(output,name)
+            if target.exists() and (not target.is_file() or name not in owned):
+                raise ValueError('Report would overwrite an unowned file; use a fresh output directory')
+        _carry_unowned(output,staging,owned)
+        backup=Path(tempfile.mkdtemp(prefix='.'+output.name+'-backup-',dir=output.parent))
+        backup.rmdir()
+        run_id=json.loads((staging/'manifest.json').read_text(encoding='utf-8'))['run_id']
+        private_write(journal,json.dumps({'owner':'passive-scan-report','output':str(output),'staging':str(staging),'backup':str(backup),'run_id':run_id}))
+        try:
+            os.replace(output,backup)
+            os.replace(staging,output)
+        except BaseException:
+            # A failed restore keeps both the journal and backup for the next run.
+            if not output.exists() and backup.exists(): os.replace(backup,output)
+            if staging.exists(): shutil.rmtree(staging)
+            journal.unlink()
+            raise
+        _recover_report(output,journal)
+        return count
+    finally:
+        if staging is not None and staging.exists() and not journal.exists(): shutil.rmtree(staging)
+        os.close(fd)

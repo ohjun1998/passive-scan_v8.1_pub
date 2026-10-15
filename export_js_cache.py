@@ -29,6 +29,7 @@ def main():
                         rows.append(sanitize_entry(value))
                     except (ValueError,KeyError,TypeError): continue
         finally: conn.close()
-    private_write(args.output,''.join(json.dumps(r,ensure_ascii=False)+'\n' for r in rows))
+    from recon81.assets import write_entries
+    write_entries(args.output, {r['url_hash']: r for r in rows})
 
 if __name__=='__main__': main()

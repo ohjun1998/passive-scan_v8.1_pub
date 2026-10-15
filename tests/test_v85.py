@@ -209,8 +209,9 @@ class V85Tests(unittest.TestCase):
         self.assertFalse(receipt['subscription_plan_verified']);self.assertEqual(packet['packet_id'],value['packet_id'])
 
     def test_writer_lock_is_not_deleted_by_another_writer(self):
-        directory=self.prepare();lock=directory/'.review-write.lock';lock.write_text('existing writer')
-        with self.assertRaises(ValueError):run_batch(directory)
+        from recon81.locking import advisory_file_lock
+        directory=self.prepare();lock=directory/'.review-write.lock'
+        with advisory_file_lock(lock),self.assertRaises(ValueError):run_batch(directory)
         self.assertTrue(lock.exists())
     def test_identity_capture_labels_do_not_attest_session(self):
         changed=copy.deepcopy(self.private);changed['context']['capture_id']='another-capture'
