@@ -1,0 +1,124 @@
+{
+  "version": "8.5.2",
+  "verification_date_kst": "2026-10-15",
+  "chatgpt_login_cli_sufficient": true,
+  "pro_subscription_check_required": false,
+  "cli_diagnostic": {
+    "checks": [
+      "cli",
+      "authentication",
+      "capabilities",
+      "mcp_configuration"
+    ],
+    "cli_version": "0.162.1",
+    "code": "CLI_EVENT_TIMEOUT",
+    "diagnostic": {
+      "elapsed_seconds": 12.009,
+      "execution_events_received": 0,
+      "model_response_seen": false,
+      "stderr_bytes": 119,
+      "stdout_bytes": 0
+    },
+    "evidence_sent": false,
+    "model_execution_verified": false,
+    "probe_requested": true,
+    "requested_model": null,
+    "schema_version": "8.5.2",
+    "stage": "startup",
+    "status": "failed",
+    "subscription_plan_verified": false,
+    "target_requests_sent": 0
+  },
+  "restored_archive_hashes_verified": 167,
+  "existing_evidence": {
+    "observations": 77,
+    "packets": 22,
+    "completed_codex_packets": 0,
+    "identity_links": 4,
+    "policy_links": 50,
+    "evaluation_labels": 50,
+    "expected_positive_labels": 13,
+    "packet_integrity_verified": true
+  },
+  "fresh_local_reproduction": {
+    "fixture": "Community Security Lab 3.4.0",
+    "war_sha256": "6b325934133adac02ef28c1745b1cfb48a598985171ed3393f6f6df0af491301",
+    "status": "passed",
+    "summary": {
+      "requests_sent": 61,
+      "identity_checks": 4,
+      "authorization_samples": 50,
+      "unauthorized_data_samples": 13,
+      "resource_groups": [
+        "admin_users",
+        "files",
+        "messages",
+        "orders",
+        "posts"
+      ],
+      "fixed_policy_matches": 25,
+      "fixed_samples": 25,
+      "error_disclosure_reproduced": true,
+      "fixed_error_control_passed": true
+    },
+    "local_reproduction_verified": true,
+    "same_cookiejar_identities_verified": true,
+    "model_execution_verified": false,
+    "human_confirmation_required": true,
+    "reproduction_receipt_sha256": "5e3902218a3f19b970c610c7734c2ae40a80c6da058df0752a8f2382220ee3c6",
+    "capture_sha256": "c38e2c8836d27473cdc78542d4981df724f7b49976560b1b3b3691bf204f6cb3"
+  },
+  "model_quality_measured": false,
+  "local_tests": {
+    "discovered": 165,
+    "passed": 163,
+    "skipped_optional_chromium": 2,
+    "new_regression_tests": 7
+  },
+  "github_ci": {
+    "status": "pending"
+  },
+  "release": {
+    "status": "pending",
+    "tag": "v8.5.2"
+  },
+  "remaining": [
+    "Complete a successful evidence-free CLI probe",
+    "Execute and validate all 22 saved-evidence packets",
+    "Evaluate actual model results using the existing 50 reference labels",
+    "Human review and final AI report"
+  ],
+  "syntax_checks": [
+    "compileall",
+    "bash -n",
+    "git diff --check",
+    "workflow YAML parse",
+    "changed documentation links"
+  ],
+  "additional_isolation_probe": {
+    "schema_version": "8.5.2",
+    "status": "failed",
+    "stage": "startup",
+    "checks": [
+      "cli",
+      "authentication",
+      "capabilities",
+      "mcp_configuration"
+    ],
+    "probe_requested": true,
+    "model_execution_verified": false,
+    "subscription_plan_verified": false,
+    "target_requests_sent": 0,
+    "evidence_sent": false,
+    "requested_model": null,
+    "cli_version": "0.162.1",
+    "code": "CLI_EVENT_TIMEOUT",
+    "diagnostic": {
+      "execution_events_received": 0,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0,
+      "model_response_seen": false,
+      "elapsed_seconds": 18.014
+    }
+  }
+}

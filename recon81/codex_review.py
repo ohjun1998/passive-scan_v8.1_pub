@@ -104,6 +104,8 @@ def _process(args, cwd, timeout, prompt=None, on_event=None, first_response_time
     lock = threading.Lock()
     overflow = threading.Event()
     response_seen = threading.Event()
+    execution_seen = threading.Event()
+    event_count = [0]
     forbidden_activity = threading.Event()
     started = time.monotonic()
     def collect(stream, index):
@@ -129,6 +131,9 @@ def _process(args, cwd, timeout, prompt=None, on_event=None, first_response_time
                         kind=event.get('type')
                         allowed_events=('thread.started','turn.started','turn.completed','item.started','item.updated','item.completed','error','turn.failed')
                         allowed_items=('agent_message','reasoning','todo_list')
+                        if kind in allowed_events:
+                            execution_seen.set()
+                            event_count[0] += 1
                         on_event({'type':kind if kind in allowed_events else 'unrecognized_event',
                                   'item_type':item_type if item_type in allowed_items else 'unrecognized_item' if item_type else ''})
                         if kind in ('item.started','item.updated','item.completed') and item_type not in allowed_items:
@@ -147,12 +152,17 @@ def _process(args, cwd, timeout, prompt=None, on_event=None, first_response_time
                threading.Thread(target=write, daemon=True)]
     for thread in threads:
         thread.start()
+    def diagnostic():
+        return {'execution_events_received':event_count[0], 'stdout_bytes':len(buffers[0]),
+                'stderr_bytes':len(buffers[1]), 'model_response_seen':response_seen.is_set(),
+                'elapsed_seconds':round(time.monotonic()-started,3)}
     try:
         while True:
             elapsed = time.monotonic() - started
             if elapsed >= timeout: raise subprocess.TimeoutExpired(args, timeout)
             if first_response_timeout and not response_seen.is_set() and elapsed >= first_response_timeout:
-                raise ReviewFailure('FIRST_RESPONSE_TIMEOUT', 'response')
+                code = 'FIRST_RESPONSE_TIMEOUT' if execution_seen.is_set() else 'CLI_EVENT_TIMEOUT'
+                raise ReviewFailure(code, 'response' if execution_seen.is_set() else 'startup', diagnostic())
             try:
                 process.wait(timeout=min(.25, timeout-elapsed)); break
             except subprocess.TimeoutExpired: pass
@@ -162,7 +172,7 @@ def _process(args, cwd, timeout, prompt=None, on_event=None, first_response_time
     except subprocess.TimeoutExpired:
         _stop(process)
         process.wait()
-        raise ReviewFailure('EXECUTION_TIMEOUT', 'response') from None
+        raise ReviewFailure('EXECUTION_TIMEOUT', 'response', diagnostic()) from None
     finally:
         # Reap descendants retaining pipe handles, even when the parent exited.
         if os.name == 'posix':
@@ -170,15 +180,15 @@ def _process(args, cwd, timeout, prompt=None, on_event=None, first_response_time
         for thread in threads:
             thread.join(timeout=2)
     if forbidden_activity.is_set():
-        raise ReviewFailure('TOOL_ACTIVITY_BLOCKED', 'response')
+        raise ReviewFailure('TOOL_ACTIVITY_BLOCKED', 'response', diagnostic())
     if overflow.is_set() or any(t.is_alive() for t in threads):
-        raise ReviewFailure('OUTPUT_LIMIT', 'response')
+        raise ReviewFailure('OUTPUT_LIMIT', 'response', diagnostic())
     if process.returncode:
-        diagnostic = (bytes(buffers[0]) + bytes(buffers[1])).decode('utf-8', errors='replace').lower()
-        code = 'RATE_LIMIT' if any(x in diagnostic for x in ('rate limit', 'too many requests', 'quota exceeded')) else \
-               'AUTH_REQUIRED' if any(x in diagnostic for x in ('unauthorized', 'authentication failed', 'login required')) else \
-               'NETWORK_ERROR' if any(x in diagnostic for x in ('connection', 'dns', 'network', 'request timed out')) else 'CLI_FAILED'
-        raise ReviewFailure(code, 'process')
+        error_text = (bytes(buffers[0]) + bytes(buffers[1])).decode('utf-8', errors='replace').lower()
+        code = 'RATE_LIMIT' if any(x in error_text for x in ('rate limit', 'too many requests', 'quota exceeded')) else \
+               'AUTH_REQUIRED' if any(x in error_text for x in ('unauthorized', 'authentication failed', 'login required')) else \
+               'NETWORK_ERROR' if any(x in error_text for x in ('connection', 'dns', 'network', 'request timed out')) else 'CLI_FAILED'
+        raise ReviewFailure(code, 'process', diagnostic())
     return buffers[0].decode('utf-8'), buffers[1].decode('utf-8')
 
 
@@ -231,7 +241,7 @@ def _execution_settings(timeout, model, first_response_timeout=60):
 
 def diagnose(probe=False, timeout=60, model=None, first_response_timeout=60):
     """Check the local adapter; only --probe sends a fixed, evidence-free model request."""
-    report = {'schema_version': '8.5.1', 'status': 'failed', 'stage': 'preflight',
+    report = {'schema_version': '8.5.2', 'status': 'failed', 'stage': 'preflight',
               'checks': [], 'probe_requested': probe, 'model_execution_verified': False,
               'subscription_plan_verified': False, 'target_requests_sent': 0,
               'evidence_sent': False, 'requested_model': None}
@@ -277,6 +287,8 @@ def diagnose(probe=False, timeout=60, model=None, first_response_timeout=60):
         report.update(status='ready', stage='completed')
     except ReviewFailure as error:
         report.update(code=error.code, stage=report['stage'] if error.stage == 'process' else error.stage)
+        if error.diagnostic:
+            report['diagnostic'] = error.diagnostic
     except FileNotFoundError:
         report['code'] = 'RESULT_MISSING' if report['stage'] == 'completion_validation' else 'CLI_NOT_FOUND'
     except (ValueError, KeyError, TypeError, OSError, RecursionError):
@@ -332,8 +344,11 @@ def run_review(report, output, patterns, max_records=100, max_bytes=500000, time
 
 
 class ReviewFailure(ValueError):
-    def __init__(self, code, stage):
+    def __init__(self, code, stage, diagnostic=None):
         self.code, self.stage = code, stage
+        keys=('execution_events_received','stdout_bytes','stderr_bytes','model_response_seen','elapsed_seconds')
+        self.diagnostic = {k:v for k,v in (diagnostic or {}).items() if k in keys
+                           and type(v) in (int,float,bool) and 0 <= v <= 10**9}
         super().__init__(code)
 
 
@@ -371,7 +386,7 @@ def execute_packet(packet, timeout=300, model=None, progress=None, first_respons
             result=validate_result(load_json(Path(directory)/'result.json'),packet)
     except ReviewFailure as error:
         # Map process failures to the actual last known stage, without echoing stderr.
-        raise ReviewFailure(error.code, stage if error.stage=='process' else error.stage) from None
+        raise ReviewFailure(error.code, stage if error.stage=='process' else error.stage, error.diagnostic) from None
     except FileNotFoundError:
         code = 'RESULT_MISSING' if stage == 'citation_validation' else 'CLI_NOT_FOUND'
         raise ReviewFailure(code, stage) from None

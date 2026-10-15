@@ -220,6 +220,8 @@ def run_batch(directory,timeout=300,model=None,retry_failed=False,max_attempts=3
             attempt.update(status='failed',stage=error.stage if isinstance(error,ReviewFailure) else attempt['stage'],
                            code=error.code if isinstance(error,ReviewFailure) else 'RESULT_OR_IO_INVALID',
                            exception_type=type(error).__name__)
+            if isinstance(error,ReviewFailure) and error.diagnostic:
+                attempt['diagnostic']=error.diagnostic
             # Do not continue network calls after a connection/auth/rate-limit failure.
             private_write(history_path,_json(history));refresh(directory);break
         private_write(history_path,_json(history));refresh(directory)

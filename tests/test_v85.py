@@ -223,7 +223,7 @@ class V85Tests(unittest.TestCase):
         import sys
         from recon81.codex_review import _process
         with self.assertRaises(ReviewFailure) as caught:
-            _process([sys.executable,'-c','import time;time.sleep(3)'],self.root,2,
+            _process([sys.executable,'-c','import time;print(\'{"type":"turn.started"}\',flush=True);time.sleep(3)'],self.root,2,
                      on_event=lambda x:None,first_response_timeout=.1)
         self.assertEqual('FIRST_RESPONSE_TIMEOUT',caught.exception.code)
     def test_diagnostic_event_values_are_allowlisted(self):

@@ -1,6 +1,39 @@
 # 유스케이스와 기능 변경
 
-현재 비교 기준: 8.5.0 → 8.5.1. [실행 안내](V851.md), 아래 v8.5.1 유스케이스와 [전체 흐름도](FLOW_V85.md)를 참고하세요.
+현재 비교 기준: 8.5.1 → 8.5.2. [실행·재현 안내](V852.md) · [남은 단계](REMAINING_STEPS.md). 아래 기존 전체 프로세스도 유지합니다.
+
+## v8.5.2 — 로컬 재현과 실행 시작 진단
+
+주황/신규는 고정 실습 표본 재현, 파랑/개선은 실행 단계·실패 진단, 회색/유지는 저장 증거 검토입니다. 사람과 외부 실습 서버는 시스템 경계 밖에 있습니다.
+
+```mermaid
+flowchart TB
+    operator(("진단자"))
+    lab(("로컬 실습 서버"))
+    subgraph system["Passive Scan v8.5.2"]
+        reproduce(["신규 · 신원·본문·수정 경로 대조"])
+        doctor(["개선 · 실행 이벤트·모델 응답 진단"])
+        batch(["유지 · 저장 증거 검토·인용 검사"])
+        report(["유지 · 실행 출처·미완료 보고"])
+    end
+    operator --- reproduce
+    operator --- doctor
+    operator --- batch
+    lab --- reproduce
+    doctor -. "정상 완료 후 실행" .-> batch
+    batch -. "실행 결과" .-> report
+    reproduce -. "독립 재현 근거" .-> report
+    classDef added fill:#fff1df,stroke:#d77708,color:#663600
+    classDef changed fill:#e7f3ff,stroke:#2675bb,color:#163e65
+    classDef kept fill:#edf0f3,stroke:#798596,color:#344252
+    class reproduce added
+    class doctor changed
+    class batch,report kept
+```
+
+재현기는 교육용 고정 표본에만 사용하며 일반 대상의 자동 로그인·AI 자동 재현 기능이 아닙니다. ChatGPT 로그인 Codex CLI 사용으로 충분하며 구독 등급 검증은 완료 조건이 아닙니다. 로컬 재현 성공과 실제 모델 완료·사람 최종 확정은 구분합니다.
+
+이전 비교 기준: 8.5.0 → 8.5.1.
 
 ## v8.5.1 — 실행 진단과 남은 작업 연결
 
