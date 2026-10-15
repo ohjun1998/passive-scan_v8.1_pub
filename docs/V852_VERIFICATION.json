@@ -76,11 +76,39 @@
     "new_regression_tests": 7
   },
   "github_ci": {
-    "status": "pending"
+    "status": "success",
+    "run_id": 38675918913,
+    "tested_head": "6c2cbb8914b18c3ca35fba7d96688ed1967338d7",
+    "jobs": [
+      "Python 3.10",
+      "Python 3.12",
+      "Python 3.13",
+      "real Chromium"
+    ],
+    "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/actions/runs/38675918913"
   },
   "release": {
-    "status": "pending",
-    "tag": "v8.5.2"
+    "status": "published_prerelease",
+    "tag": "v8.5.2",
+    "commit": "6c2cbb8914b18c3ca35fba7d96688ed1967338d7",
+    "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/releases/tag/v8.5.2",
+    "workflow_run": 38675919060,
+    "source_zip_sha256": "84a0a27bea888695c1a7a96f2296edd4252bcd15991dac5a219aff58c3c19ddf",
+    "published_at": "2026-10-15T03:23:11Z",
+    "assets": [
+      {
+        "name": "passive-scan-8.5.2.zip",
+        "sha256": "84a0a27bea888695c1a7a96f2296edd4252bcd15991dac5a219aff58c3c19ddf",
+        "size": 251234,
+        "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/releases/download/v8.5.2/passive-scan-8.5.2.zip"
+      },
+      {
+        "name": "SHA256SUMS",
+        "sha256": "a66627a48168b23151796a813b2bfd2291a761766f0b066fd22a5fd478e5263e",
+        "size": 89,
+        "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/releases/download/v8.5.2/SHA256SUMS"
+      }
+    ]
   },
   "remaining": [
     "Complete a successful evidence-free CLI probe",
@@ -119,6 +147,16 @@
       "stderr_bytes": 0,
       "model_response_seen": false,
       "elapsed_seconds": 18.014
+    }
+  },
+  "pull_request": {
+    "number": 4,
+    "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/pull/4",
+    "head": "e6df17606f10fa803a8216b264c1293e5ef9b6ad",
+    "merge_commit": "6c2cbb8914b18c3ca35fba7d96688ed1967338d7",
+    "ci": {
+      "status": "success",
+      "run_id": 38675725601
     }
   }
 }
