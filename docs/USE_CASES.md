@@ -1,6 +1,43 @@
 # 유스케이스와 기능 변경
 
-현재 비교 기준: **8.6.1 → 8.7.0**. [후보 추천 사용법](V87.md) · [검증 기록](V87_VERIFICATION.json) · [남은 단계](REMAINING_STEPS.md).
+현재 비교 기준: **8.7.0 → 8.8.0**. [공식 주제별 구현 범위](V88.md) · [검증](V88_VERIFICATION.json) · [남은 단계](REMAINING_STEPS.md).
+
+## v8.8.0 — PortSwigger 주제 매핑과 점검 범위
+
+주황/신규는 공식 주제 분류·유형별 부족 자료 표시, 파랑/개선은 규칙·AI 선택·보고서 구분, 회색/유지는 저장 증거와 ChatGPT 로그인입니다. 역할은 시스템 경계 밖에 있습니다.
+
+```mermaid
+flowchart TB
+    operator["진단자"]
+    reviewer["검토자"]
+    subgraph system["Passive Scan v8.8.0"]
+        saved(["유지 · 저장 요청·응답과 기존 로그인"])
+        catalog(["신규 · 공식 30주제와 33유형 연결"])
+        rules(["개선 · 단서 후보와 기능 점검 대상 분리"])
+        ai(["개선 · 우선 단서만 짧은 AI 검토"])
+        coverage(["신규 · 미평가·추가 자료 표시"])
+        report(["개선 · 유형·구분·상태별 추천 보기"])
+    end
+    operator --- saved
+    saved -. "지원되는 저장 자료" .-> rules
+    catalog -. "유형·필요한 증거" .-> rules
+    rules -. "기본 상한 24개" .-> ai
+    rules -. "전체 항목" .-> report
+    rules -. "단서 없음·수집 한계" .-> coverage
+    ai -. "검증된 짧은 판단" .-> report
+    coverage -. "유형별 범위" .-> report
+    reviewer --- report
+    classDef added fill:#fff1df,stroke:#d77708,color:#663600
+    classDef changed fill:#e7f3ff,stroke:#2675bb,color:#163e65
+    classDef kept fill:#edf0f3,stroke:#798596,color:#344252
+    class catalog,coverage added
+    class rules,ai,report changed
+    class saved kept
+```
+
+단순 기능 발견은 기본 AI 선택에서 제외합니다. 기능 점검 대상도 포함하는 옵션은 기존 예산 안에서만 동작합니다. 원시 전송을 잃은 요청 스머글링은 미평가로 남기며 마스킹된 JWT·쿠키 정보를 복원하지 않습니다. 공식 취약점 주제와 프로젝트의 실제 구현 범위를 함께 표시합니다. 전체 수집 프로세스와 과거 버전 그림은 아래에 보존합니다. httpx 20워커와 각 `-rl 10 -t 5`는 유지합니다.
+
+이전 비교 기준: **8.6.1 → 8.7.0**. [후보 추천 사용법](V87.md) · [검증 기록](V87_VERIFICATION.json) · [남은 단계](REMAINING_STEPS.md).
 
 ## v8.7.0 — 여러 취약점 유형의 후보 추천
 

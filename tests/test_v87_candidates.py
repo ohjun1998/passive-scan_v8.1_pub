@@ -9,7 +9,8 @@ from unittest.mock import patch
 
 from ai_review import main
 from examples.v87.demo import fixture, make
-from recon81.candidate_rules import KINDS, recommend, validate_refs, clean_record
+from recon81.candidate_catalog import BASE_KINDS as KINDS
+from recon81.candidate_rules import recommend, validate_refs, clean_record
 from recon81.candidate_review import make_packet, validate_decisions, prompt_for, execute_candidates
 from recon81.candidate_report import create_recommendations, select_for_ai
 from recon81.codex_review import ReviewFailure

@@ -48,6 +48,7 @@ def main(argv=None):
     p.add_argument('--report', required=True); p.add_argument('--output', required=True)
     p.add_argument('--scope', action='append', required=True); p.add_argument('--authority')
     p.add_argument('--ai', action='store_true'); p.add_argument('--ai-limit', type=int, default=24)
+    p.add_argument('--ai-include-surfaces', action='store_true', help='Include feature inspection surfaces in the existing AI budget')
     p.add_argument('--ai-batch-size', type=int, default=8); p.add_argument('--ai-workers', type=int, default=2)
     p.add_argument('--timeout', type=int, default=300); p.add_argument('--first-response-timeout', type=int, default=180)
     p.add_argument('--model')
@@ -96,7 +97,7 @@ def main(argv=None):
             from recon81.ai_review import load_json
             result = create_recommendations(args.report,args.output,args.scope,
                 load_json(args.authority) if args.authority else None,args.ai,args.ai_limit,args.ai_batch_size,
-                args.ai_workers,args.timeout,args.model,args.first_response_timeout)
+                args.ai_workers,args.timeout,args.model,args.first_response_timeout,args.ai_include_surfaces)
             print(json.dumps(result['summary'],ensure_ascii=False))
             if result['summary']['ai_failed_packets']: return 3
         else:
