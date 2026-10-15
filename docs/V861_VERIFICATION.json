@@ -1,0 +1,166 @@
+{
+  "version": "8.6.1",
+  "checked_at": "2026-10-15T10:16:28.110649+00:00",
+  "local_tests": {
+    "total": 273,
+    "passed": 269,
+    "skipped": 4,
+    "new_regression_tests": 13
+  },
+  "model_probe": {
+    "checks": [
+      "cli",
+      "authentication",
+      "capabilities",
+      "mcp_configuration",
+      "model_probe"
+    ],
+    "cli_version": "0.162.1",
+    "evidence_sent": false,
+    "model_execution_verified": true,
+    "probe_requested": true,
+    "requested_model": null,
+    "schema_version": "8.5.2",
+    "stage": "completed",
+    "status": "ready",
+    "subscription_plan_verified": false,
+    "target_requests_sent": 0
+  },
+  "startup_reproduction": {
+    "baseline_cli_versions": [
+      "0.158.0",
+      "0.159.2",
+      "0.162.1"
+    ],
+    "longest_zero_event_timeout_seconds": 120,
+    "isolated_project_doc_scan_disabled": "startup succeeds",
+    "exact_low_level_hang_cause": "unconfirmed"
+  },
+  "fixes": [
+    "isolated review child skips unrelated project document scan",
+    "nonfatal error items are diagnostics, not tools or model answers",
+    "provider schema excludes uniqueItems; stored schema and local duplicate validation retained",
+    "implicit hooks, notify, shell snapshots and bundled skill install disabled only for review child",
+    "batch first response timeout defaults to 180 seconds with 300 second total limit",
+    "provider schema binds packet and observation IDs within enum limits",
+    "prompt specifies citation membership and exact excerpt formats"
+  ],
+  "saved_evidence_run": {
+    "status": "completed",
+    "records": 77,
+    "packets": 36,
+    "completed_attempts": 36,
+    "labels": 50,
+    "target_requests_sent": 0,
+    "model_quality_evaluation": "completed",
+    "execution": {
+      "human_confirmation_required": true,
+      "model_execution_verified": true,
+      "notice": "Execution counts describe validated local packet receipts, not semantic quality, subscription tier or reproduction.",
+      "packet_execution_counts": {
+        "codex_verified": 36,
+        "incomplete": 0,
+        "manual_or_unverified": 0
+      },
+      "provider": "batch_aggregate",
+      "subscription_plan_verified": false,
+      "target_requests_sent": 0
+    },
+    "coverage": {
+      "comparison_packets": {
+        "complete_saved_group": 31,
+        "partial_saved_group": 5
+      },
+      "completed_packets": 36,
+      "packets": 36,
+      "records": 77,
+      "reproduction_verified": 0,
+      "stages": {
+        "ai_reviewed": 2,
+        "evidence_validated": 75
+      }
+    },
+    "fragments": {
+      "total": 82,
+      "reviewed": 82,
+      "cited": 80
+    },
+    "reviews": 112,
+    "assessments": {
+      "insufficient_evidence": 61,
+      "likely_benign": 45,
+      "suspicious": 6
+    },
+    "attempts": {
+      "total": 42,
+      "statuses": {
+        "completed": 36,
+        "failed": 6
+      },
+      "failed_codes": {
+        "CLI_FAILED": 1,
+        "INVALID_COMPLETION_OR_RESULT": 4,
+        "FIRST_RESPONSE_TIMEOUT": 1
+      }
+    },
+    "metrics": {
+      "abstained_or_unreviewed": 0,
+      "expected_positives": 13,
+      "false_negative": 0,
+      "false_positive": 2,
+      "labeled_cases": 50,
+      "precision": 0.8666666666666667,
+      "recall": 1.0,
+      "true_negative": 35,
+      "true_positive": 13
+    },
+    "file_sha256": {
+      "report_manifest": "4435be92be10e94fb033bd9d1e51afb78fce42c4ee0ecdd43f50c71341b926c3",
+      "aggregate": "323f8c265e85dbb8f416b8c96ea70b1715890f802dcce027396615c97fd5f995",
+      "coverage": "c8b611161f128706e74e562816f6d13412495319d0d024377f35be83a3166202",
+      "execution": "a84dbc9d7c515bed03d356d9157ddf93360ffabed626fc8c0a0216e882686aa0",
+      "evaluation": "f24b87f77844938404a43222f51282d25082d6d609c5506e966e0dd4990c9a6a"
+    },
+    "limitations": [
+      "Two allowed control observations are included in a suspicious review without their own citations; retained as two false positives and ai_reviewed rather than evidence_validated.",
+      "Metrics apply only to the existing 50 declared labels, not general detection quality.",
+      "Incremental development run preserved 35 previously accepted results; the final packet succeeded with the final ID enums and citation prompt.",
+      "Model review is not independent reproduction or human confirmation."
+    ]
+  },
+  "v860_release": {
+    "merged_pr": 5,
+    "commit": "911bd7355c916a884c0bb77e80944460b30fe66a",
+    "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/releases/tag/v8.6.0",
+    "status": "published"
+  },
+  "v861_release": {
+    "status": "pending_merge_and_release",
+    "pr": 6,
+    "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/pull/6"
+  },
+  "ci": {
+    "head_sha": "019c3ab4d4ad1e9469e008e1d72826ed4922d5c0",
+    "run_id": 38713155909,
+    "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/actions/runs/38713155909",
+    "status": "success",
+    "python_versions": [
+      "3.10",
+      "3.12",
+      "3.13"
+    ],
+    "tests_per_python": {
+      "total": 268,
+      "passed": 264,
+      "skipped": 4
+    },
+    "real_browser_tests": {
+      "passed": 2,
+      "job_id": 116349299000
+    },
+    "pinned_httpx_katana_http_https_tests": {
+      "passed": 2,
+      "job_id": 116349298735
+    }
+  }
+}
