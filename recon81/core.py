@@ -150,7 +150,9 @@ def sanitize_headers(headers):
     for name, value in header_pairs(headers):
         if name.lower() in ('content-length', 'transfer-encoding', 'content-encoding'):
             continue  # Saved bodies have been decoded / redacted.
-        if SECRET.search(name):
+        if name.lower() == 'access-control-allow-credentials' and value.strip() in ('true', 'false'):
+            value = value.strip()  # Protocol boolean; do not turn invalid TRUE into valid true.
+        elif SECRET.search(name):
             value = MASK
         elif name.lower() in ('location', 'referer', 'referrer'):
             try:

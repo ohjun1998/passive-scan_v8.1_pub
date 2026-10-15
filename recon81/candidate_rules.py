@@ -9,9 +9,9 @@ from .core import MASK, Scope, canonical, digest, get_header, sanitize_headers, 
 from .review_evidence import authority_links, pointer, _leaves
 from .analysis import comparison_selector
 
-KINDS = {'idor': 'IDOR', 'authorization': '인가·권한', 'xss': 'XSS', 'sqli': 'SQLi',
-         'sensitive_data': '민감정보', 'credential_exposure': 'API KEY·TOKEN·비밀값'}
-RULE_VERSION = '8.7.0-1'
+from .candidate_catalog import KINDS, CATALOG
+
+RULE_VERSION = '8.8.0-1'
 MAX_CANDIDATES = 5000
 MAX_REFS = 8
 DB_ERROR = re.compile(r'SQLSTATE\[[A-Z0-9]+\]|You have an error in your SQL syntax|'
@@ -156,13 +156,18 @@ def recommend(records, patterns, authority=None):
         selector = comparison_selector(r)
         if not selector['uncertain']: groups[selector['key']].append(r)
 
-    def add(kind, record, rule, priority, strength, reason, refs, next_check, limitations=(), supports=()):
+    def add(kind, record, rule, priority, strength, reason, refs, next_check, limitations=(), supports=(), lead_class='evidence_signal'):
         refs = [r for r in refs if r][:MAX_REFS]
         if not refs: return
         subject = record['observation_id']
         support_ids = sorted(set(supports) - {subject})
         candidate = {'candidate_id': digest([RULE_VERSION, kind, subject, rule, refs, support_ids]),
-            'kind': kind, 'rule': rule, 'subject_ids': [subject], 'support_ids': support_ids,
+            'kind': kind, 'lead_class': lead_class, 'source_url': CATALOG[kind]['source_url'],
+            'evidence_context': {'response_status': (record.get('response') or {}).get('status'),
+                'response_content_type': get_header((record.get('response') or {}).get('headers', []), 'content-type'),
+                'request_body_complete': bool((record.get('body') or {}).get('complete')),
+                'response_body_complete': bool(((record.get('response') or {}).get('body') or {}).get('complete'))},
+            'rule': rule, 'subject_ids': [subject], 'support_ids': support_ids,
             'method': record['method'], 'url': record['url'], 'priority': priority,
             'signal_strength': strength, 'reason': reason, 'evidence': refs,
             'context': record.get('context') or {}, 'authority': record.get('authority') or {},
@@ -230,11 +235,11 @@ def recommend(records, patterns, authority=None):
                 break
             source = SOURCE.search(text); sink = SINK.search(text)
             if source and sink:
-                add('xss', r, 'client_source_and_sink_present', 'low', 'low',
+                add('dom_based', r, 'client_source_and_sink_present', 'low', 'low',
                     '같은 저장 JS·HTML에서 외부 입력 소스와 위험 처리 지점이 함께 관찰됩니다.',
                     [reference(r, 'response.body.text', start=max(0, m.start() - 40), end=m.end() + 70) for m in (source, sink)],
                     '외부 입력이 해당 처리 지점에 실제로 도달하는지와 중간 정화·Trusted Types 처리를 추적하세요.',
-                    ['동일 파일에 두 패턴이 있다는 사실만 확인했으며 데이터 흐름은 추적하지 않았습니다.'])
+                    ['동일 파일에 두 패턴이 있다는 사실만 확인했으며 데이터 흐름은 추적하지 않았습니다.'], lead_class='review_surface')
 
         error = DB_ERROR.search(text)
         if error:
@@ -268,6 +273,9 @@ def recommend(records, patterns, authority=None):
                 '공개용 클라이언트 식별자·예제인지, 비공개 서버 자격정보인지와 노출 범위를 확인하세요. 원문 값으로 외부 인증을 시도하지 마세요.',
                 ['정상 토큰 발급 응답·공개 API 식별자일 수 있습니다. 마스킹은 값의 유효성이나 원래 존재 여부를 보증하지 않습니다.'])
 
+    from .candidate_extended import extend_record
+    for record in clean.values(): extend_record(record, add)
+
     order = {'high': 0, 'medium': 1, 'low': 2}
-    candidates.sort(key=lambda c: (order[c['priority']], c['kind'], c['candidate_id']))
+    candidates.sort(key=lambda c: (c['lead_class'] == 'review_surface', order[c['priority']], c['kind'], c['candidate_id']))
     return candidates, clean, len(records) - len(scoped)

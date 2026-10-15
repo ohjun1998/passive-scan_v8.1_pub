@@ -1,10 +1,14 @@
-# Passive Scan v8.7.0
+# Passive Scan v8.8.0
 
 URL 목록과 실제 HTTP 요청/응답을 함께 관리하는 버그바운티 정찰 도구입니다.
 
 원본 `ohjun1998/passive-scan_v8_pub`의 커밋 `56fe674eff848ba516dc1a743879e43c7cd3a12b`를 복사해 만든 별도 프로젝트입니다. 원본 저장소를 수정하거나 원본에서 스캔을 실행하지 않습니다.
 
-현재 버전은 **8.7.0**입니다. 저장된 요청·응답을 먼저 규칙으로 선별해 **IDOR, 인가·권한, XSS, SQLi, 민감정보, API KEY·TOKEN·비밀값 후보**를 추천합니다. 선택적으로 우선 후보만 ChatGPT 로그인 Codex CLI에 묶어 짧게 검토시킵니다. 후보별 근거 위치·다음 확인·미검토 상태를 제공하며, 취약점 확정·자동 재현·키 유효성 확인은 수행하지 않습니다. [사용법·제한](docs/V87.md) · [검증 기록](docs/V87_VERIFICATION.json) · [남은 단계](docs/REMAINING_STEPS.md) · [유스케이스](docs/USE_CASES.md).
+현재 버전은 **8.8.0**입니다. PortSwigger Web Security Academy의 취약점 관련 **30개 주제를 33개 추천 유형에 연결**했습니다. SSRF·XXE·경로 탐색·명령어/템플릿/NoSQL 주입·CORS·클릭재킹·캐시·인증 등을 추가하고, API·GraphQL·OAuth/JWT·파일 업로드·경쟁 상태 등은 기능 점검 대상과 결함 단서를 구분합니다. HTML은 기본적으로 단서 후보를 표시하며 유형별 부족한 자료도 보여 줍니다. 원시 전송이 필요한 요청 스머글링은 현재 정규화 자료에서 미평가로 표시합니다. [유형별 구현 범위·사용법](docs/V88.md) · [검증](docs/V88_VERIFICATION.json) · [유스케이스](docs/USE_CASES.md).
+
+기본 AI 예산은 24개로 유지하며 단순 기능 발견은 AI 선택에서 제외합니다. 기능 점검 대상까지 짧게 검토하려면 같은 예산 안에서 `--ai --ai-include-surfaces`를 사용합니다. 기존 명령·자동 재현 없음·대상 추가 요청 없음·httpx 20워커와 각 `-rl 10 -t 5`는 유지합니다.
+
+이전 **8.7.0**에서는 저장된 요청·응답을 먼저 규칙으로 선별해 **IDOR, 인가·권한, XSS, SQLi, 민감정보, API KEY·TOKEN·비밀값 후보**를 추천합니다. 선택적으로 우선 후보만 ChatGPT 로그인 Codex CLI에 묶어 짧게 검토시킵니다. 후보별 근거 위치·다음 확인·미검토 상태를 제공하며, 취약점 확정·자동 재현·키 유효성 확인은 수행하지 않습니다. [사용법·제한](docs/V87.md) · [검증 기록](docs/V87_VERIFICATION.json) · [남은 단계](docs/REMAINING_STEPS.md) · [유스케이스](docs/USE_CASES.md).
 
 ```bash
 # 저장 자료 전체의 지원 규칙 처리: 대상 요청·모델 호출 없음

@@ -5,7 +5,7 @@ from .ai_review import object_schema, text_schema, _validate_schema, HEX
 from .core import digest
 from .candidate_rules import RULE_VERSION, scrub
 
-PROMPT_VERSION = '8.7.0-1'
+PROMPT_VERSION = '8.8.0-1'
 DECISIONS = ('retain', 'dismiss', 'needs_context')
 DECISION_SCHEMA = object_schema({'packet_id': {'type': 'string', 'pattern': HEX},
     'reviews': {'type': 'array', 'minItems': 1, 'maxItems': 12, 'items': object_schema({
@@ -17,8 +17,9 @@ DECISION_SCHEMA = object_schema({'packet_id': {'type': 'string', 'pattern': HEX}
 
 def make_packet(candidates):
     fields = ('candidate_id', 'kind', 'subject_ids', 'support_ids', 'method', 'url', 'priority',
-              'signal_strength', 'reason', 'evidence', 'context', 'authority', 'limitations', 'next_check')
-    packet = {'schema_version': '8.7', 'rule_version': RULE_VERSION, 'prompt_version': PROMPT_VERSION,
+              'signal_strength', 'reason', 'evidence', 'context', 'authority', 'limitations', 'next_check',
+              'lead_class', 'source_url', 'evidence_context')
+    packet = {'schema_version': '8.8', 'rule_version': RULE_VERSION, 'prompt_version': PROMPT_VERSION,
               'candidates': [{key: copy.deepcopy(c[key]) for key in fields} for c in candidates]}
     packet['packet_id'] = digest(packet)
     return packet
@@ -32,7 +33,12 @@ def prompt_for(packet):
         '각 candidate_id에 정확히 한 번씩 짧게 답하세요. 새 후보·ID·인용·보고서 초안을 만들지 마세요. '
         '증거 위치는 이미 로컬 검증됐지만 의미·취약점은 확인되지 않았습니다. subject_ids만 판단 대상이며 '
         'support_ids는 정상 비교 자료·신원 보조 자료입니다. 대조군을 의심 대상으로 바꾸지 마세요.\n'
-        'IDOR·인가, XSS, SQLi, 민감정보, API KEY·TOKEN·비밀값의 각 후보에 맞는 단서만 판단하세요. '
+        'PortSwigger 주제에 매핑된 kind별 단서만 판단하세요. source_url은 분류 참고이며 접속하지 마세요. '
+        'lead_class=evidence_signal은 단서 후보, review_surface는 기능 점검 대상이며 결함 근거가 아닙니다. '
+        '기능·엔드포인트·오류·헤더 부재만으로 취약점이나 높은 위험을 단정하지 마세요. '
+        'API·GraphQL·WebSocket·LLM·OAuth·JWT·직렬화·XML 사용 자체는 결함이 아닙니다. '
+        '경쟁 상태·스머글링·캐시 오염은 순서·원시 전송·캐시 키와 후속 재사용 근거가 필요합니다. '
+        '토큰·쿠키 속성·multipart 바이트·WebSocket 프레임 등 생략된 자료를 복원해 추측하지 마세요. '
         '다른 취약점 유형도 억지로 검토하거나 정상 패킷마다 증거 부족 보고서를 만들지 마세요. '
         '반영만으로 XSS, DB 오류만으로 SQLi, 소스와 sink의 동시 등장만으로 데이터 흐름을 확정하지 마세요. '
         '정상 토큰 발급·본인 정보·공개 클라이언트 키와 비공개 정보 노출을 구분하세요. '

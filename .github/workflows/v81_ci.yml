@@ -1,4 +1,4 @@
-name: v8.7 candidates, evidence and transport verification
+name: v8.8 Academy candidates and evidence verification
 on:
   push:
     branches: [main]
@@ -33,6 +33,7 @@ jobs:
           python review_queue.py build --scope-file examples/scope.txt
           python examples/v85/demo.py --output reports/v85-demo
           python examples/v87/demo.py --output reports/v87-demo
+          python examples/v88/demo.py --output reports/v88-demo
           python ai_review.py recommend --report reports/v87-demo/base --scope example.test --output reports/v87-cli
   browser-fixture:
     runs-on: ubuntu-latest
