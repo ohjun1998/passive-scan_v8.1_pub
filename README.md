@@ -1,10 +1,22 @@
-# Passive Scan v8.6.1
+# Passive Scan v8.7.0
 
 URL 목록과 실제 HTTP 요청/응답을 함께 관리하는 버그바운티 정찰 도구입니다.
 
 원본 `ohjun1998/passive-scan_v8_pub`의 커밋 `56fe674eff848ba516dc1a743879e43c7cd3a12b`를 복사해 만든 별도 프로젝트입니다. 원본 저장소를 수정하거나 원본에서 스캔을 실행하지 않습니다.
 
-현재 버전은 **8.6.1**입니다. [AI 실행 수정 안내](docs/V861.md) · [최적화·고도화 안내](docs/V86.md) · [남은 단계](docs/REMAINING_STEPS.md) · [전체 유스케이스](docs/USE_CASES.md). 수집·이력·보고서를 같은 인벤토리로 통합하고, 실행 샘플링과 전체 발견 목록을 분리했습니다. 보호 게이트웨이가 실제 전송 전에 정책·예산을 검사하며, JS 분석은 전체 결과를 SQLite에 보존합니다. 계정별 비교 증거를 함께 AI 패킷에 배치하고 반복 연산을 줄였습니다.
+현재 버전은 **8.7.0**입니다. 저장된 요청·응답을 먼저 규칙으로 선별해 **IDOR, 인가·권한, XSS, SQLi, 민감정보, API KEY·TOKEN·비밀값 후보**를 추천합니다. 선택적으로 우선 후보만 ChatGPT 로그인 Codex CLI에 묶어 짧게 검토시킵니다. 후보별 근거 위치·다음 확인·미검토 상태를 제공하며, 취약점 확정·자동 재현·키 유효성 확인은 수행하지 않습니다. [사용법·제한](docs/V87.md) · [검증 기록](docs/V87_VERIFICATION.json) · [남은 단계](docs/REMAINING_STEPS.md) · [유스케이스](docs/USE_CASES.md).
+
+```bash
+# 저장 자료 전체의 지원 규칙 처리: 대상 요청·모델 호출 없음
+python ai_review.py recommend --report reports/requests --scope example.test --output reports/candidates
+
+# 우선 후보 최대 24개만 짧게 AI 검토: 최대 8개씩, 동시 실행 2개
+python ai_review.py recommend --report reports/requests --scope example.test --output reports/candidates-ai --ai
+```
+
+보고서는 출력 폴더의 `index.html`과 `recommendations.json`입니다. 인가 비교용 `--authority`는 선택 사항이며 다른 취약점 유형에 계정 라벨을 강제하지 않습니다. 기본 규칙 처리는 저장된 본문 전체를 검사하지만 실행 흐름이나 저장되지 않은 증거를 추론해 확정하지 않습니다.
+
+이전 **8.6.1** 관련 문서: [AI 실행 수정 안내](docs/V861.md) · [최적화·고도화 안내](docs/V86.md) · [남은 단계](docs/REMAINING_STEPS.md) · [전체 유스케이스](docs/USE_CASES.md). 수집·이력·보고서를 같은 인벤토리로 통합하고, 실행 샘플링과 전체 발견 목록을 분리했습니다. 보호 게이트웨이가 실제 전송 전에 정책·예산을 검사하며, JS 분석은 전체 결과를 SQLite에 보존합니다. 계정별 비교 증거를 함께 AI 패킷에 배치하고 반복 연산을 줄였습니다.
 
 ChatGPT 로그인 Codex CLI면 충분하며 Pro 등급 확인은 완료 조건이 아닙니다. v8.6.1은 분석 전 프로젝트 문서 탐색 정지와 CLI 경고를 도구 실행으로 오인하던 문제를 수정했습니다. 기존 로그인으로 실제 모델 probe와 저장 증거 36/36개 패킷을 완료했습니다. 77개 기록·82개 조각을 검토했으며, 기존 라벨 50개에서 TP 13·TN 35·FP 2·FN 0을 기록했습니다. 이 표본의 결과와 정상 대조군 오탐 2건의 한계는 [검증 기록](docs/V861_VERIFICATION.json)을 참고하세요. [이전 독립 로컬 재현 기록](docs/V852.md)은 별도 근거로 유지합니다.
 
