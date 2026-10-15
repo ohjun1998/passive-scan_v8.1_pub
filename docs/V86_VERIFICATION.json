@@ -125,7 +125,25 @@
   "chatgpt_login_cli_sufficient": true,
   "pro_subscription_check_required": false,
   "github_ci": {
-    "status": "pending"
+    "status": "success",
+    "run_id": 38690262552,
+    "tested_head": "2dbbeab08f0479df82b9385654abc730e4340528",
+    "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/actions/runs/38690262552",
+    "jobs": [
+      "Python 3.10",
+      "Python 3.12",
+      "Python 3.13",
+      "real Chromium",
+      "checksum-pinned httpx and Katana"
+    ],
+    "real_browser_tests": 2,
+    "real_tool_tests": 2,
+    "real_tools": {
+      "httpx": "1.12.0",
+      "katana": "1.8.0",
+      "archive_sha256_verified": true,
+      "local_http_and_https_policy_tests_passed": true
+    }
   },
   "limitations": [
     "Actual model startup remains blocked; no semantic quality claim",
@@ -136,5 +154,20 @@
     "Legacy lost capture chronology is explicitly migrated as a summary",
     "Aggregate AI output has an explicit 16MiB budget",
     "GraphQL cost bound covers known syntax, not unknown resolver implementation"
-  ]
+  ],
+  "pull_request": {
+    "number": 5,
+    "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/pull/5",
+    "state": "open",
+    "draft": false,
+    "branch": "codex/v860-integrity-performance",
+    "main_updated": false,
+    "merge_approval_required": true,
+    "approval_block": "Automatic approval review rejected merging into main because this exact merge was not explicitly authorized."
+  },
+  "release": {
+    "version": "8.6.0",
+    "status": "not_published",
+    "reason": "Awaiting explicit main-branch merge approval; release workflow runs after merge."
+  }
 }

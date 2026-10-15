@@ -17,7 +17,8 @@ ChatGPT에 로그인한 Codex CLI로 저장 요청·응답을 분석하는 방�
 | 새 비교 패킷 자동 검토 | 대기 | probe 정상 완료 후 실행. 현재 새36패킷 완료0건; 기존22패킷도0건 |
 | 실제 모델 오탐·누락 평가 | 대기 | 새 실제 모델 결과를 기존 50표본 라벨과 비교. 현재 성능 수치 없음 |
 | 최종 AI 보고서·사람 확정 | 대기 | 완료·fragment·인용·모델 출처 검사 후 최종 검토 |
-| v8.6.0 GitHub 검증·반영 | 진행 중 | Python3버전·실제 Chromium·고정 httpx/Katana 로컬 서버 CI와 검증 기록 확인 |
+| v8.6.0 GitHub 코드·CI | 완료 | [PR #5](https://github.com/ohjun1998/passive-scan_v8.1_pub/pull/5), Python3버전·실제 Chromium·고정 httpx/Katana 로컬 HTTP/HTTPS 검증 통과 |
+| main 병합·v8.6.0 배포 | 승인 대기 | 자동 승인 검토가 main 병합을 차단. 사용자의 명시적 병합 승인 후 실행. main은 아직8.5.2 |
 
 ## 다음 실행 순서
 
