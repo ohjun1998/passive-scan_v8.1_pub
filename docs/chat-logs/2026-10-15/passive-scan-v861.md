@@ -32,4 +32,10 @@
 
 ## GitHub 반영
 
-[PR #6](https://github.com/ohjun1998/passive-scan_v8.1_pub/pull/6)에 최종 코드·검증 결과를 반영하고 해당 커밋의 CI를 확인한 뒤, 사용자의 병합 승인에 따라 main 병합과 v8.6.1 배포를 진행한다.
+[PR #6](https://github.com/ohjun1998/passive-scan_v8.1_pub/pull/6)의 최종 커밋 `3f9ffa86db2b0123a480a32e0bcfc4215c906d98`에서 CI `38719194090`가 성공했다. Python 3.10·3.12·3.13 각각 273개 중 269개 통과·4개 제외이며, 별도 실제 Chromium 2개·httpx/Katana HTTP·HTTPS 2개도 모두 통과했다.
+
+사용자가 승인한 대로 PR #6을 main의 `f72425b25068069befe1b8ddbdea4260e9ecce2b`에 병합했다. main CI `38719397847`와 Source release `38719397837`가 모두 성공했다. [v8.6.1 사전 배포](https://github.com/ohjun1998/passive-scan_v8.1_pub/releases/tag/v8.6.1)는 2026-10-15 10:20:12 UTC에 게시됐고 태그가 병합 커밋을 가리킨다.
+
+배포 소스 ZIP은 334,599바이트이며 SHA-256은 `26680f53d5339d7a3344adfcd88ab285298d5e94dc520f4ee84db7605844dd78`이다. SHA256SUMS는 89바이트다. 동일 커밋을 UTC로 git archive한 결과와 체크섬 파일의 해시가 게시된 두 자산의 해시와 일치함을 확인했다.
+
+최종 독립 검토에서도 36개 수락 결과·집계 보고서·평가의 해시, 218개 인용, 50개 라벨 수치가 일치했다. 정상 대조군 연결 오탐 2건과 사람의 최종 취약점 판단은 남은 항목으로 기록했다. 병합·배포 완료와 이 검증 기록을 이번 문서 커밋으로 반영했다.

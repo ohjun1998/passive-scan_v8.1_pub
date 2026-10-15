@@ -1,6 +1,6 @@
 {
   "version": "8.6.1",
-  "checked_at": "2026-10-15T10:16:28.110649+00:00",
+  "checked_at": "2026-10-15T10:22:27.658302+00:00",
   "local_tests": {
     "total": 273,
     "passed": 269,
@@ -126,7 +126,15 @@
       "Metrics apply only to the existing 50 declared labels, not general detection quality.",
       "Incremental development run preserved 35 previously accepted results; the final packet succeeded with the final ID enums and citation prompt.",
       "Model review is not independent reproduction or human confirmation."
-    ]
+    ],
+    "independent_audit": {
+      "status": "passed",
+      "accepted_packet_manifests": 36,
+      "report_matches_accepted_results": true,
+      "empty_results": 0,
+      "verified_citations": 218,
+      "metrics_recomputed": true
+    }
   },
   "v860_release": {
     "merged_pr": 5,
@@ -135,11 +143,55 @@
     "status": "published"
   },
   "v861_release": {
-    "status": "pending_merge_and_release",
+    "status": "published",
     "pr": 6,
-    "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/pull/6"
+    "commit": "f72425b25068069befe1b8ddbdea4260e9ecce2b",
+    "tag": "v8.6.1",
+    "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/releases/tag/v8.6.1",
+    "prerelease": true,
+    "release_id": 413672243,
+    "published_at": "2026-10-15T10:20:12Z",
+    "workflow_run_id": 38719397837,
+    "workflow_status": "success",
+    "source_zip": {
+      "name": "passive-scan-8.6.1.zip",
+      "bytes": 334599,
+      "sha256": "26680f53d5339d7a3344adfcd88ab285298d5e94dc520f4ee84db7605844dd78"
+    },
+    "checksum_file": {
+      "name": "SHA256SUMS",
+      "bytes": 89,
+      "sha256": "c487ef300d26addf3aee6829f62b9d68bd1dc9975392714545f96340a80c7cdd"
+    },
+    "published_asset_digests_reproduced_from_commit_with_utc_archive": true
   },
   "ci": {
+    "head_sha": "3f9ffa86db2b0123a480a32e0bcfc4215c906d98",
+    "run_id": 38719194090,
+    "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/actions/runs/38719194090",
+    "status": "success",
+    "python_versions": [
+      "3.10",
+      "3.12",
+      "3.13"
+    ],
+    "tests_per_python": {
+      "total": 273,
+      "passed": 269,
+      "skipped": 4
+    },
+    "real_browser_tests": {
+      "passed": 2,
+      "job_id": 116369261721
+    },
+    "pinned_httpx_katana_http_https_tests": {
+      "passed": 2,
+      "job_id": 116369261597
+    },
+    "main_run_id": 38719397847,
+    "main_status": "success"
+  },
+  "previous_ci": {
     "head_sha": "019c3ab4d4ad1e9469e008e1d72826ed4922d5c0",
     "run_id": 38713155909,
     "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/actions/runs/38713155909",

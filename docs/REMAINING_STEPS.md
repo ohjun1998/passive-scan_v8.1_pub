@@ -21,12 +21,12 @@ ChatGPT에 로그인한 Codex CLI로 저장 요청·응답을 분석하는 방�
 | 사람의 최종 취약점 확정 | 별도 검토 필요 | AI 의견·독립 재현·기대 권한을 함께 검토 |
 | v8.6.0 GitHub 코드·CI | 완료 | [PR #5](https://github.com/ohjun1998/passive-scan_v8.1_pub/pull/5), Python3버전·실제 Chromium·고정 httpx/Katana 로컬 HTTP/HTTPS 검증 통과 |
 | main 병합·v8.6.0 배포 | 완료 | 사용자 승인 후 [PR #5](https://github.com/ohjun1998/passive-scan_v8.1_pub/pull/5)를 `911bd7355c916a884c0bb77e80944460b30fe66a`에 병합. main CI·배포 검증 통과, [v8.6.0 사전 배포](https://github.com/ohjun1998/passive-scan_v8.1_pub/releases/tag/v8.6.0)의 소스 ZIP·SHA256SUMS 확인 |
+| v8.6.1 병합·배포 | 완료 | [PR #6](https://github.com/ohjun1998/passive-scan_v8.1_pub/pull/6) 병합, 최종 PR·main CI·배포 성공. [v8.6.1 사전 배포](https://github.com/ohjun1998/passive-scan_v8.1_pub/releases/tag/v8.6.1)의 소스 ZIP·SHA256SUMS 해시 재현 확인 |
 
 ## 남은 작업
 
-1. v8.6.1 최종 PR 커밋의 CI를 확인하고 승인된 병합·배포를 완료한다.
-2. 의심 의견에 정상 대조군이 함께 연결되는 의미상 모호성을 줄인다. 기존 2건의 오탐과 미인용 상태는 사실대로 유지한다.
-3. 실제 운영 증거에서는 진단자가 기대 권한·독립 재현과 AI 의견을 함께 검토하고 최종 보고서를 확정한다.
+1. 의심 의견에 정상 대조군이 함께 연결되는 의미상 모호성을 줄인다. 기존 2건의 오탐과 미인용 상태는 사실대로 유지한다.
+2. 실제 운영 증거에서는 진단자가 기대 권한·독립 재현과 AI 의견을 함께 검토하고 최종 보고서를 확정한다.
 
 다른 실행 컴퓨터에서는 [doctor --probe와 배치 실행 안내](V861.md)를 따른다. 이 환경의 36패킷·평가·집계 보고서는 완료됐으므로 반복 실행할 필요가 없다. 실패 시 원인과 이력을 확인한 뒤에만 --retry-failed로 재개한다. 기존22패킷과 새36패킷, 기존 라벨 ID와 새 실습 ID를 섞지 않는다.
 
