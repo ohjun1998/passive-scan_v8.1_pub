@@ -27,7 +27,7 @@ def decisions(packet):
 
 def verified(packet, *args):
     return decisions(packet), {'provider': 'codex_chatgpt_login', 'status': 'completed',
-        'model_execution_verified': True, 'completion_events_verified': True, 'candidate_validation': 'verified'}
+        'model_execution_verified': True, 'tools_disabled': True, 'completion_events_verified': True, 'candidate_validation': 'verified'}
 
 
 class RuleTests(unittest.TestCase):

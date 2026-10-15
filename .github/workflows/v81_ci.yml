@@ -1,4 +1,4 @@
-name: v8.8 Academy candidates and evidence verification
+name: v8.9 saved-only intelligence and evidence verification
 on:
   push:
     branches: [main]
@@ -34,6 +34,7 @@ jobs:
           python examples/v85/demo.py --output reports/v85-demo
           python examples/v87/demo.py --output reports/v87-demo
           python examples/v88/demo.py --output reports/v88-demo
+          python examples/v89/demo.py --output reports/v89-demo
           python ai_review.py recommend --report reports/v87-demo/base --scope example.test --output reports/v87-cli
   browser-fixture:
     runs-on: ubuntu-latest
