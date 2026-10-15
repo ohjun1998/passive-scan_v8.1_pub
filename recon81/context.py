@@ -1,6 +1,6 @@
 """Explicit non-secret observation labels; independent of masked credentials."""
 import re
-from .core import redact_text, digest, response_identity
+from .core import redact_text, digest, response_identity, sanitize_value
 
 LABELS = ('actor','tenant','scenario','capture_id','expected_access','operation','parent_observation_id')
 STATES = ('discovered','captured','queued','testing','confirmed','false_positive','deferred')
@@ -29,5 +29,8 @@ def attach_context(record,value=None):
     asset=record.get('asset') or {}
     if asset.get('content_hash') and asset.get('analyzer_version'):
         identity.append([asset['content_hash'],asset['analyzer_version']])
+    if record.get('probe'):
+        record['probe']=sanitize_value(record['probe'])
+        identity.append(['probe',record['probe']])
     record['observation_id']=digest(identity)
     return record

@@ -1,6 +1,76 @@
 # 유스케이스와 기능 변경
 
-현재 비교 기준: 8.5.1 → 8.5.2. [실행·재현 안내](V852.md) · [남은 단계](REMAINING_STEPS.md). 아래 기존 전체 프로세스도 유지합니다.
+현재 비교 기준: **8.5.2 → 8.6.0**. [최적화·고도화 안내](V86.md) · [남은 단계](REMAINING_STEPS.md). 아래 이전 버전의 전체 프로세스와 변경 기록도 유지합니다.
+
+## v8.6.0 — 수집부터 보고서까지
+
+주황/신규는 독립 이벤트 이력, 파랑/개선은 요청 보호·전체 증거 보존·비교·보고서, 회색/유지는 ChatGPT 로그인 Codex와 사람의 최종 판단입니다. 역할은 시스템 경계 밖에 표시합니다.
+
+```mermaid
+flowchart TB
+    operator(("진단자"))
+    reviewer(("검토자"))
+    subgraph system["Passive Scan v8.6.0"]
+        scope(["유지 · 범위·수집 모드 설정"])
+        collect(["개선 · 정찰·트래픽·JS·명세 수집"])
+        guard(["개선 · 전송 전 정책·예산 검사"])
+        inventory(["개선 · 전체 발견·증거 보존"])
+        events(["신규 · 반복 수집 순서 보존"])
+        compare(["개선 · 계정·자원 비교"])
+        packet(["개선 · 비교 중심 AI 패킷"])
+        model(["유지 · ChatGPT 로그인 Codex 검토"])
+        report(["개선 · 동일 인벤토리 보고서"])
+        confirm(["유지 · 사람의 근거 검토·확정"])
+    end
+    operator --- scope
+    operator --- collect
+    collect -. "능동 요청" .-> guard
+    collect -. "저장 자료" .-> inventory
+    guard -. "실제 응답" .-> inventory
+    inventory -. "캡처 이벤트" .-> events
+    inventory -. "자원 선택값" .-> compare
+    compare -. "계정별 증거" .-> packet
+    packet -. "명시적 실행" .-> model
+    inventory -. "전체 기록" .-> report
+    events -. "순서 근거" .-> report
+    model -. "인용·실행 영수증" .-> report
+    reviewer --- report
+    reviewer --- confirm
+    report -. "미완료·불확실성 포함" .-> confirm
+    classDef added fill:#fff1df,stroke:#d77708,color:#663600
+    classDef changed fill:#e7f3ff,stroke:#2675bb,color:#163e65
+    classDef kept fill:#edf0f3,stroke:#798596,color:#344252
+    class events added
+    class collect,guard,inventory,compare,packet,report changed
+    class scope,model,confirm kept
+```
+
+오프라인 import·보고서·AI 패킷 준비는 대상 요청을 보내지 않습니다. 능동 도구는 고정 버전과 로컬 프록시로 전송을 통제합니다. httpx20워커·각 `-rl 10 -t 5`는 유지합니다. 실제 Codex 검토는 CLI probe가 정상 완료된 환경에서 실행하며, 현재 환경의 모델 미완료 상태를 숨기지 않습니다.
+
+## v8.6.0 — 저장·재사용·출력 개선
+
+```mermaid
+flowchart TB
+    operator(("진단자"))
+    subgraph system["저장 증거 처리"]
+        cache(["개선 · 자산별 전체 JS 결과 캐시"])
+        schema(["개선 · 제한된 명세 참조 해석"])
+        source(["개선 · 공통 수집·분류·이력"])
+        queue(["개선 · 실행 샘플·보류 이유 분리"])
+        output(["개선 · 보고서 교체·분할 보기"])
+    end
+    operator --- cache
+    operator --- schema
+    operator --- output
+    cache -. "누락 없는 추출" .-> source
+    schema -. "필드·생략 정보" .-> source
+    source -. "선택된 조회만" .-> queue
+    source -. "전체 기록" .-> output
+    classDef changed fill:#e7f3ff,stroke:#2675bb,color:#163e65
+    class cache,schema,source,queue,output changed
+```
+
+이전 비교 기준: 8.5.1 → 8.5.2.
 
 ## v8.5.2 — 로컬 재현과 실행 시작 진단
 

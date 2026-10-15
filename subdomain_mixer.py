@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os
 import glob
-import random
+import hashlib
 
 def mix_subdomains():
     print("[*] Phase 2: 서브도메인 글로벌 믹서 (Shuffle) 가동...")
@@ -15,8 +15,9 @@ def mix_subdomains():
                 if line:
                     all_subs.add(line)
     
-    subs_list = list(all_subs)
-    random.shuffle(subs_list) # 특정 도메인에 부하가 쏠리지 않도록 셔플
+    # Stable hash order spreads hosts reproducibly; collecting the same input
+    # twice must not silently change coverage or worker assignment.
+    subs_list = sorted(all_subs, key=lambda host: (hashlib.sha256(host.encode()).hexdigest(), host))
     
     num_chunks = 20
     os.makedirs('balanced_targets', exist_ok=True)
@@ -27,9 +28,8 @@ def mix_subdomains():
         return
 
     # 완벽하게 20등분하여 2차 워커들에게 배분할 준비
-    chunk_size = (len(subs_list) + num_chunks - 1) // num_chunks
     for i in range(num_chunks):
-        chunk = subs_list[i*chunk_size : (i+1)*chunk_size]
+        chunk = subs_list[i::num_chunks]
         with open(f'balanced_targets/targets_{i:02d}.txt', 'w', encoding='utf-8') as out_f:
             for sub in chunk:
                 out_f.write(sub + '\n')

@@ -109,7 +109,7 @@ class Capture:
             text = raw.decode('utf-8', errors='replace')
             status = response.code
             record = attach_context(normalize_record(self.target + path, 'POST' if form else 'GET',
-                headers=dict(req.header_items()), body=body,
+                headers=dict(req.header_items()), body=body if body is not None else b'',
                 response={'status': status, 'headers': list(response.headers.items()), 'body': text},
                 source='community_lab_3.4_reproduction', include_text=True),
                 {'actor': actor, 'capture_id': self.capture_id, 'expected_access': expected, 'scenario': scenario})

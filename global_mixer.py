@@ -1,143 +1,28 @@
 #!/usr/bin/env python3
-import os
-import glob
-import re
-import random
-import posixpath
-from urllib.parse import urlparse, parse_qsl
+"""Preserve discoveries in Inventory and create a separate deterministic probe queue."""
+import json
+from pathlib import Path
 from recon81.network_policy import NetworkPolicy
-from recon81.core import Scope
+from recon81.core import Inventory, Scope, private_write
+from recon81.pipeline import (execution_plan, ingest_saved, make_absolute,
+                              get_safe_domain, normalize_dynamic_path)
 
-def make_absolute(url, domain):
-    if url.startswith('http://') or url.startswith('https://'): return url
-    elif url.startswith('//'): return f"https:{url}"
-    elif url.startswith('/'): return f"https://{domain}{url}"
-    else: return f"https://{domain}/{url}"
-
-def get_safe_domain(target):
-    return "wild_" + target[2:] if target.startswith('*.') else target
-
-def normalize_dynamic_path(path):
-    p = re.sub(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}', '{UUID}', path)
-    p = re.sub(r'\b\d{3,}\b', '{ID}', p)
-    p = re.sub(r'\b[a-zA-Z0-9]{10,}\b', '{HASH}', p)
-    return p
 
 def run_mixer():
-    print("[+] 글로벌 셔플 엔진 가동 (과거 DB 통합 및 Httpx 재검증 준비)...")
-    if not os.path.exists('targets.txt'): return
-    
-    with open('targets.txt', 'r') as f:
-        targets = [line.strip() for line in f if line.strip()]
+    if not Path('targets.txt').exists(): return
+    scope=Scope(Path('targets.txt').read_text(encoding='utf-8').splitlines())
+    with Inventory('reports/request_inventory.sqlite3') as inventory:
+        stats=ingest_saved('results',scope,inventory,history_files=['previous_report/master_url_db.txt'])
+        records=[r for r in inventory.records() if scope.allows(r['url'])]
+    selected,deferred,summary=execution_plan(records,NetworkPolicy(scope))
+    summary['ingestion']=stats
+    # All 20 workers retain their existing independent -rl 10 -t 5 settings.
+    for i in range(20):
+        private_write(Path('chunks')/f'chunk_{i:02d}.txt',''.join(u+'\n' for u in selected[i::20]))
+    private_write('reports/execution_deferred.jsonl',''.join(json.dumps(r,ensure_ascii=False)+'\n' for r in deferred))
+    private_write('reports/execution_plan.json',json.dumps(summary,ensure_ascii=False,indent=2))
+    private_write('reports/master_url_db.txt',''.join(url+'\n' for url in sorted({r['url'] for r in records})))
+    print(f"[+] 전체 URL {summary['total_urls']}개 보존 / 실행 {len(selected)}개 / 보류 {len(deferred)}개 / 파싱 오류 {stats['parse_errors']}개")
 
-    policy = NetworkPolicy(Scope(targets))
-    target_map = {get_safe_domain(t): t for t in targets}
 
-    js_url_converter = {}
-    for mf in glob.glob('results/*_js_mapping.txt'):
-        try:
-            with open(mf, 'r', encoding='utf-8', errors='ignore') as f:
-                for line in f:
-                    if '\t' in line:
-                        s, o = line.strip().split('\t', 1)
-                        js_url_converter[s] = o
-        except: pass
-
-    all_urls = set()
-    txt_files = glob.glob('results/**/*.*', recursive=True) + glob.glob('results/*.*')
-    
-    for file_path in txt_files:
-        if not os.path.isfile(file_path): continue
-        filename = os.path.basename(file_path).lower()
-        match = re.match(r'^(.*)_(linkfinder|gau|waybackurls|katana|crawl)(?:_[0-9]{2})?\.txt$', filename)
-        if not match: continue
-        
-        safe_domain = match.group(1)
-        if safe_domain not in target_map: continue
-        
-        raw_target = target_map[safe_domain]
-        is_wildcard = raw_target.startswith('*.')
-        base_domain = raw_target[2:] if is_wildcard else raw_target
-
-        try:
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                for line in f:
-                    line_str = line.strip()
-                    if not line_str or line_str.startswith('#'): continue
-                    line_str = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', line_str)
-                    if not line_str: continue
-
-                    if '\t' in line_str: raw_url = line_str.split('\t', 1)[1]
-                    else: raw_url = line_str
-
-                    abs_url = make_absolute(raw_url, base_domain)
-                    parsed_netloc = urlparse(abs_url).netloc.split(':')[0]
-                    
-                    if is_wildcard:
-                        if not (parsed_netloc == base_domain or parsed_netloc.endswith('.' + base_domain)):
-                            continue
-                    else:
-                        if parsed_netloc != base_domain:
-                            continue
-                            
-                    all_urls.add(abs_url)
-        except: pass
-
-    # 💡 [핵심 추가] 이전 스캔에서 찾아둔 과거 URL 텍스트 DB를 통째로 쏟아 붓습니다! (오늘 Httpx가 상태를 재검사하게 됨)
-    prev_db_path = 'previous_report/master_url_db.txt'
-    if os.path.exists(prev_db_path):
-        try:
-            print("[*] 이전 스캔 텍스트 DB를 글로벌 믹서에 합류시킵니다 (Httpx 전체 재검사)...")
-            with open(prev_db_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    url = line.strip()
-                    if url: all_urls.add(url)
-        except Exception as e:
-            print(f"[-] 텍스트 DB 합류 실패: {e}")
-
-    junk_exts = ('.png', '.jpg', '.jpeg', '.gif', '.svg', '.css', '.woff', '.woff2', '.ico', '.eot', '.ttf', '.mp4')
-    blacklist_words = ['logout', 'signout', 'delete', 'remove', 'revoke', 'destroy']
-    
-    valid_targets = []
-    signature_counts = {}
-    
-    for u in all_urls:
-        if policy.reason(u): continue
-        parsed = urlparse(u)
-        
-        if parsed.path.lower().endswith(junk_exts): continue
-        url_lower = u.lower()
-        if any(b in url_lower for b in blacklist_words): continue
-            
-        query_keys = tuple(sorted([k for k, v in parse_qsl(parsed.query, keep_blank_values=True)]))
-        normalized_path = normalize_dynamic_path(parsed.path)
-        path_dir = posixpath.dirname(normalized_path)
-        path_ext = posixpath.splitext(normalized_path)[1]
-        
-        signature = (parsed.netloc, path_dir, path_ext, query_keys)
-        
-        if signature_counts.get(signature, 0) >= 5: continue
-            
-        signature_counts[signature] = signature_counts.get(signature, 0) + 1
-        valid_targets.append(u)
-
-    random.shuffle(valid_targets)
-    print(f"[+] 노이즈 완전 제거 및 글로벌 셔플 완료! 최종 점검 대상(과거+오늘): 총 {len(valid_targets)} 개")
-
-    os.makedirs('chunks', exist_ok=True)
-    num_chunks = 20
-    
-    if len(valid_targets) == 0:
-        for i in range(num_chunks): open(f'chunks/chunk_{i:02d}.txt', 'w').close()
-        return
-
-    chunk_size = (len(valid_targets) + num_chunks - 1) // num_chunks
-    for i in range(num_chunks):
-        chunk_data = valid_targets[i*chunk_size : (i+1)*chunk_size]
-        with open(f'chunks/chunk_{i:02d}.txt', 'w') as f:
-            for url in chunk_data: f.write(url + '\n')
-        print(f"  -> 노드 {i:02d} 배정 완료: {len(chunk_data)} 개의 타겟 할당")
-
-if __name__ == '__main__':
-    run_mixer()
-
+if __name__=='__main__': run_mixer()

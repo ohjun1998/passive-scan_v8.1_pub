@@ -102,9 +102,9 @@ jobs:
           go install github.com/lc/gau/v2/cmd/gau@latest
           go install github.com/tomnomnom/waybackurls@latest
           go install github.com/BishopFox/jsluice/cmd/jsluice@latest
-          go install github.com/projectdiscovery/katana/cmd/katana@latest
+          python tools/install_probe_tools.py --tool katana --output "$HOME/go/bin"
           pip install uro
-          sudo apt-get install -y jq
+          sudo apt-get install -y jq openssl
           curl -sSfL https://github.com/trufflesecurity/trufflehog/releases/download/v3.82.0/trufflehog_3.82.0_linux_amd64.tar.gz -o trufflehog.tar.gz
           tar -xzf trufflehog.tar.gz trufflehog
           sudo mv trufflehog /usr/local/bin/
@@ -147,14 +147,25 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with: {pattern: 'node-results-*', path: encrypted_storage, merge-multiple: true}
+      - uses: dawidd6/action-download-artifact@v3
+        continue-on-error: true
+        with:
+          workflow: passive_recon.yml
+          name: passive-recon-master-report-secured
+          path: previous_report
       - run: |
-          mkdir -p results encrypted_chunks
+          mkdir -p results reports previous_report encrypted_chunks
           for f in encrypted_storage/*.gpg; do gpg --batch --passphrase "$ACTIONS_CRYPTO_PASSWORD" --decrypt "$f" | tar -xzf - -C results; done
+          if [ -f previous_report/passive_recon_report_secured.zip ]; then unzip -P "$ACTIONS_CRYPTO_PASSWORD" previous_report/passive_recon_report_secured.zip -d previous_report; fi
+          if [ -f previous_report/request_inventory.sqlite3 ]; then cp previous_report/request_inventory.sqlite3 reports/request_inventory.sqlite3; fi
           printf '%s\n' "$TARGET_DOMAINS" > targets.txt
           python global_mixer.py
           tar -czf - -C chunks . | gpg --symmetric --batch --yes --passphrase "$ACTIONS_CRYPTO_PASSWORD" --cipher-algo AES256 -o encrypted_chunks/global_chunks.tar.gz.gpg
+          tar -czf - -C reports request_inventory.sqlite3 master_url_db.txt execution_plan.json execution_deferred.jsonl | gpg --symmetric --batch --yes --passphrase "$ACTIONS_CRYPTO_PASSWORD" --cipher-algo AES256 -o encrypted_chunks/global_inventory.tar.gz.gpg
       - uses: actions/upload-artifact@v4
         with: {name: global-chunks, path: encrypted_chunks/global_chunks.tar.gz.gpg, retention-days: 1}
+      - uses: actions/upload-artifact@v4
+        with: {name: global-inventory, path: encrypted_chunks/global_inventory.tar.gz.gpg, retention-days: 1}
   httpx-live-probe:
     if: inputs.mode == 'balanced' && inputs.httpx
     needs: global-mixer
@@ -169,7 +180,8 @@ jobs:
       - uses: actions/setup-go@v5
         with: {go-version: stable}
       - run: |
-          go install github.com/projectdiscovery/httpx/cmd/httpx@latest
+          openssl version
+          python tools/install_probe_tools.py --tool httpx --output "$HOME/go/bin"
           echo "$HOME/go/bin" >> "$GITHUB_PATH"
       - uses: actions/download-artifact@v4
         with: {name: global-chunks, path: temp_chunks}
@@ -206,7 +218,7 @@ jobs:
           mkdir -p results encrypted_shots
           for f in encrypted_httpx/*.gpg; do gpg --batch --passphrase "$ACTIONS_CRYPTO_PASSWORD" --decrypt "$f" | tar -xzf - -C results; done
           printf '%s\n' "$TARGET_DOMAINS" > scope.txt
-          python -c 'import glob,json; rows=(json.loads(x) for p in glob.glob("results/httpx_results_*.json") for x in open(p) if x.strip()); print("\n".join(sorted({r["url"] for r in rows if r.get("status_code")==200})))' > reviewed_pages.txt
+          python -c 'import glob,json; rows=(json.loads(x) for p in glob.glob("results/httpx_results_[0-9][0-9].json") for x in open(p) if x.strip()); print("\n".join(sorted({r["url"] for r in rows if r.get("status_code")==200})))' > reviewed_pages.txt
           python safe_screenshots.py --active --urls reviewed_pages.txt --scope-file scope.txt --max-pages 30
       - name: Encrypt screenshot samples
         if: always()
@@ -228,6 +240,9 @@ jobs:
       - uses: actions/download-artifact@v4
         with: {pattern: 'node-results-*', path: encrypted_storage, merge-multiple: true}
       - uses: actions/download-artifact@v4
+        if: needs.global-mixer.result == 'success'
+        with: {name: global-inventory, path: global_inventory}
+      - uses: actions/download-artifact@v4
         if: inputs.mode == 'balanced' && inputs.httpx && (needs.httpx-live-probe.result == 'success' || needs.httpx-live-probe.result == 'failure')
         with: {pattern: 'httpx-results-*', path: encrypted_storage, merge-multiple: true}
       - uses: actions/download-artifact@v4
@@ -245,7 +260,8 @@ jobs:
           for f in encrypted_storage/*.gpg; do [ -f "$f" ] || continue; gpg --batch --passphrase "$ACTIONS_CRYPTO_PASSWORD" --decrypt "$f" | tar -xzf - -C results; done
           printf '%s\n' "$TARGET_DOMAINS" > targets.txt
           if [ -f previous_report/passive_recon_report_secured.zip ]; then unzip -P "$ACTIONS_CRYPTO_PASSWORD" previous_report/passive_recon_report_secured.zip -d previous_report; fi
-          if [ -f previous_report/request_inventory.sqlite3 ]; then cp previous_report/request_inventory.sqlite3 reports/request_inventory.sqlite3; fi
+          if [ -f global_inventory/global_inventory.tar.gz.gpg ]; then gpg --batch --passphrase "$ACTIONS_CRYPTO_PASSWORD" --decrypt global_inventory/global_inventory.tar.gz.gpg | tar -xzf - -C reports; fi
+          if [ ! -f reports/request_inventory.sqlite3 ] && [ -f previous_report/request_inventory.sqlite3 ]; then cp previous_report/request_inventory.sqlite3 reports/request_inventory.sqlite3; fi
           python collect_request_inventory.py --xlsx
           python txt_to_excel.py
           python build_screenshot_gallery.py

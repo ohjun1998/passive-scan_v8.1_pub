@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import selectors
+import signal
 import subprocess
 import time
 from pathlib import Path
@@ -29,8 +30,9 @@ def seconds(value):
         return 0
 
 
-def supervise(argv, output, guard, policy, deadline=1200, kind="httpx"):
-    child=subprocess.Popen(argv,stdout=subprocess.PIPE,stderr=subprocess.PIPE,bufsize=0)
+def supervise(argv, output, guard, policy, deadline=1200, kind="httpx", env=None, transport=None):
+    guard.check()
+    child=subprocess.Popen(argv,stdout=subprocess.PIPE,stderr=subprocess.PIPE,bufsize=0,env=env,start_new_session=True)
     events=selectors.DefaultSelector()
     events.register(child.stdout,selectors.EVENT_READ,'stdout')
     events.register(child.stderr,selectors.EVENT_READ,'stderr')
@@ -55,7 +57,7 @@ def supervise(argv, output, guard, policy, deadline=1200, kind="httpx"):
                     for raw in lines:
                         line=raw.decode('utf-8',errors='replace')
                         if key.data=='stderr':
-                            if any(s in line.lower() for s in ('timed out','timeout','deadline exceeded')):
+                            if transport is None and any(s in line.lower() for s in ('timed out','timeout','deadline exceeded')):
                                 guard.feedback(failed=True)
                             continue
                         try:
@@ -73,27 +75,57 @@ def supervise(argv, output, guard, policy, deadline=1200, kind="httpx"):
                             url = result.get('input') or result.get('url') or ''
                             status = int(result.get('status_code') or 0)
                             failed = bool(result.get('failed') or result.get('error'))
+                        if transport is not None and not transport.claim_response(url,status):
+                            # A proxy refusal is not a target response. Preserve
+                            # its stop reason in the separate transport ledger.
+                            continue
                         if url and policy.reason(url):
                             if kind == 'katana' and not status: continue
                             raise GuardStopped('unexpected_probe_destination')
+                        if transport is not None:
+                            result['transport']='protected_gateway'
+                            line=json.dumps(result,ensure_ascii=False)
                         headers=response.get('headers') or response.get('header') or response.get('response_headers') or {}
                         if not isinstance(headers,dict): headers={}
                         retry=next((str(v) for k,v in headers.items() if k.lower()=='retry-after'),'')
                         stream.write(line+'\n')
                         stream.flush()
-                        guard.feedback(status,seconds(response.get('time') or response.get('response_time') or 0),failed,retry,host=urlsplit(url).netloc)
+                        if transport is None:
+                            guard.feedback(status,seconds(response.get('time') or response.get('response_time') or 0),failed,retry,host=urlsplit(url).netloc)
         return child.wait()
     except GuardStopped:
         print(kind+' stopped by protection; no automatic retry or resume.')
         return 3
     finally:
         if child.poll() is None:
-            child.terminate()
+            os.killpg(child.pid,signal.SIGTERM)
             try: child.wait(timeout=3)
             except subprocess.TimeoutExpired:
-                child.kill(); child.wait()
+                os.killpg(child.pid,signal.SIGKILL); child.wait()
         events.close()
         child.stdout.close(); child.stderr.close()
+
+
+def protected_supervise(argv, output, guard, policy, deadline=1200, kind='httpx', selected_urls=(), deferred_path=None):
+    """Production entry point: the tool never receives an unguarded HTTP proxy."""
+    from recon81.protected_proxy import ProtectedProxy
+    gateway = ProtectedProxy(policy,guard)
+    try:
+        with gateway:
+            return supervise(gateway.command(argv),output,guard,policy,deadline,kind,
+                             env=gateway.environment(),transport=gateway)
+    except GuardStopped:
+        return 3
+    finally:
+        # This ledger records target transport evidence even if the child is
+        # stopped before it can print its final overloaded response.
+        state = guard.state()
+        deferred = sorted(set(selected_urls)-gateway.attempted_urls)
+        if deferred_path is not None:
+            previous = set(Path(deferred_path).read_text().splitlines()) if Path(deferred_path).exists() else set()
+            private_write(deferred_path,'\n'.join(sorted(previous|set(deferred)))+('\n' if previous or deferred else ''))
+        private_write(Path(output).with_suffix('.network.json'),json.dumps({'guard':state,'events':list(gateway.events),
+            'selected_not_dispatched':len(deferred),'deferred_reason':(state['reason'] or 'tool_finished_without_dispatch') if deferred else ''},ensure_ascii=False,indent=2))
 
 
 def main():
@@ -117,7 +149,7 @@ def main():
     private_write(args.output,'')
     if not urls: return 0
     guard=RunGuard(args.state,interval=0)
-    try: return supervise(command(args.httpx,ready),args.output,guard,policy)
+    try: return protected_supervise(command(args.httpx,ready),args.output,guard,policy,selected_urls=urls,deferred_path=args.output.with_suffix('.deferred.txt'))
     finally: guard.close()
 
 if __name__=='__main__':

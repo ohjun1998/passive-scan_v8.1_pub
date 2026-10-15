@@ -1,0 +1,13 @@
+{
+  "platform": "linux_amd64",
+  "httpx": {
+    "version": "1.12.0",
+    "url": "https://github.com/projectdiscovery/httpx/releases/download/v1.12.0/httpx_1.12.0_linux_amd64.zip",
+    "sha256": "9d8439e8b6c9aa7d1e2314817a392e00d5178da3af5652f7475f88868f418f76"
+  },
+  "katana": {
+    "version": "1.8.0",
+    "url": "https://github.com/projectdiscovery/katana/releases/download/v1.8.0/katana_1.8.0_linux_amd64.zip",
+    "sha256": "cb027ae99d0757061b70c07a15c7a80f62c5a535ab52c4a329f80c4b0a7309d2"
+  }
+}

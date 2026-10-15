@@ -3,7 +3,7 @@ import copy
 import json
 import re
 from urllib.parse import urlsplit
-from .core import canonical, digest, sanitize_value, invalid_json_constant
+from .core import canonical, digest, sanitize_value, invalid_json_constant, safe_url
 from .ai_review import SCHEMA, HEX, _evidence, _json, _validate_schema
 
 CITATION = {'type':'object','properties':{
@@ -53,8 +53,15 @@ def _chunks(text,size):
     if current:yield ''.join(current)
 
 
-def split_body(body,size):
-    result={k:copy.deepcopy(body[k]) for k in ('kind','complete','reason','size_bytes') if k in body}
+def split_body(body,size,max_fragments=None):
+    if size < 1 or max_fragments is not None and max_fragments < 1:
+        raise ValueError('Invalid fragment budget')
+    fragments=[]
+    def append(fragment):
+        if max_fragments is not None and len(fragments)>=max_fragments:
+            raise ValueError('Body fragment budget exceeded')
+        fragments.append(fragment)
+    result=sanitize_value({k:copy.deepcopy(body[k]) for k in ('kind','complete','reason','size_bytes') if k in body})
     text=body.get('text','')
     if not isinstance(text,str):raise ValueError('Invalid body text')
     text=sanitize_value(text)
@@ -62,21 +69,25 @@ def split_body(body,size):
         try:value=sanitize_value(json.loads(body.get('text',''),parse_constant=invalid_json_constant))
         except (ValueError,RecursionError):
             if body.get('complete'):raise ValueError('Malformed JSON source body') from None
-            return [dict(result,kind='text_fragment',text=part,fields=[],complete=False,reason='source_json_partial')
-                    for part in _chunks(text,size)] or [dict(result,kind='text_fragment',text='',fields=[],complete=False,reason='source_json_partial')]
+            for part in _chunks(text,size):
+                append(dict(result,kind='text_fragment',text=part,fields=[],complete=False,reason='source_json_partial'))
+            return fragments or [dict(result,kind='text_fragment',text='',fields=[],complete=False,reason='source_json_partial')]
         text=_json(value)
     if len(text.encode())<=size:
-        result.update(text=text,fields=list(body.get('fields',[]))[:128])
+        result.update(text=text,fields=sanitize_value(list(body.get('fields',[]))[:128]))
         return [result]
+    source_hash=digest(text)
     if body.get('kind')!='json':
-        return [dict(result,kind='text_fragment',text=part,fields=[],complete=False,reason='ai_text_fragment',
-                     fragment_index=i,source_body_sha256=digest(text)) for i,part in enumerate(_chunks(text,size))]
-    fragments=[];values={}
+        for i,part in enumerate(_chunks(text,size)):
+            append(dict(result,kind='text_fragment',text=part,fields=[],complete=False,reason='ai_text_fragment',
+                        fragment_index=i,source_body_sha256=source_hash))
+        return fragments
+    values={}
     def flush():
         nonlocal values
         if values:
-            fragments.append(dict(result,kind='json_fragment',values=values,text=_json(values),fields=list(values),
-                                  complete=False,reason='ai_json_fragment',source_body_sha256=digest(text)))
+            append(dict(result,kind='json_fragment',values=values,text=_json(values),fields=list(values),
+                        complete=False,reason='ai_json_fragment',source_body_sha256=source_hash))
             values={}
     for path,child in _leaves(value):
         candidate=dict(values);candidate[path]=child
@@ -84,8 +95,8 @@ def split_body(body,size):
             flush()
             if len(_json({path:child}).encode())>size:
                 for part in _chunks(child if isinstance(child,str) else canonical(child),size):
-                    fragments.append(dict(result,kind='text_fragment',text=part,fields=[path],complete=False,
-                        reason='ai_json_value_fragment',origin_pointer=path,source_body_sha256=digest(text)))
+                    append(dict(result,kind='text_fragment',text=part,fields=[path],complete=False,
+                        reason='ai_json_value_fragment',origin_pointer=path,source_body_sha256=source_hash))
                 continue
         values[path]=child
     flush()
@@ -93,10 +104,10 @@ def split_body(body,size):
     return fragments
 
 
-def expand_record(record,scope,body_bytes):
+def expand_record(record,scope,body_bytes,max_fragments=None):
     item=_evidence(record,scope)
-    request=split_body(record.get('body') or {},body_bytes)
-    response=split_body((record.get('response') or {}).get('body') or {},body_bytes) if record.get('response') else [None]
+    request=split_body(record.get('body') or {},body_bytes,max_fragments)
+    response=split_body((record.get('response') or {}).get('body') or {},body_bytes,max_fragments) if record.get('response') else [None]
     count=max(len(request),len(response))
     for index in range(count):
         part=copy.deepcopy(item);part['body']=request[min(index,len(request)-1)]
@@ -111,9 +122,10 @@ def expand_record(record,scope,body_bytes):
 
 
 def group_key(record):
-    context=record.get('context') or {}
-    route=re.sub(r'(?<=/)[0-9]+(?=/|$)','{id}',urlsplit(record['url']).path)
-    return canonical([urlsplit(record['url']).netloc,context.get('scenario') or record['method']+' '+route])
+    context=sanitize_value(record.get('context') or {})
+    url=safe_url(record['url'])
+    route=re.sub(r'(?<=/)[0-9]+(?=/|$)','{id}',urlsplit(url).path)
+    return canonical([urlsplit(url).netloc,context.get('scenario') or sanitize_value(record['method'])+' '+route])
 
 
 def authority_links(records,configuration,scope):

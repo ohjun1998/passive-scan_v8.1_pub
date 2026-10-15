@@ -12,6 +12,11 @@ from recon81.network_policy import NetworkPolicy, scope_from_file
 from recon81.graphql_policy import read_only_graphql
 
 
+def origin(url):
+    parsed=urlsplit(url)
+    return parsed.scheme,parsed.hostname,parsed.port or (443 if parsed.scheme=='https' else 80)
+
+
 def select_pages(urls, policy, max_pages=30, per_host=2):
     hosts=defaultdict(int)
     selected=[]
@@ -43,7 +48,7 @@ class BrowserGate:
             route.abort(); return
         method=request.method.upper()
         data=request.post_data_buffer
-        read_post=method=='POST' and read_only_graphql(data)
+        read_post=method=='POST' and self.policy.allows_graphql(request.url,request.headers,data)
         if method not in ('GET','HEAD') and not read_post:
             route.abort(); return
         if self.policy.reason(request.url,'GET' if read_post else method):
@@ -68,7 +73,7 @@ class BrowserGate:
                     if self.remaining<=0: route.abort(); return
                     self.remaining-=1
                     redirect_headers=request.headers
-                    if urlsplit(target).netloc != urlsplit(request.url).netloc:
+                    if origin(target) != origin(request.url):
                         redirect_headers={k:v for k,v in redirect_headers.items() if k.lower() not in ('authorization','cookie')}
                     result=self.client.fetch(target,method,redirect_headers,limit=2*1024*1024)
                     if result['status']==0 or not result['complete']: route.abort(); return
@@ -105,12 +110,13 @@ def main():
     p.add_argument('--output',type=Path,default=Path('results/screenshots'))
     p.add_argument('--max-pages',type=int,default=30)
     p.add_argument('--disable-js',action='store_true')
+    p.add_argument('--graphql-url',action='append',default=[],help='Exact reviewed GraphQL endpoint; JSON query operations only')
     p.add_argument('--active',action='store_true')
     args=p.parse_args()
     if not args.active: p.error('Screenshots require --active')
     if not 1<=args.max_pages<=100: p.error('--max-pages must be 1..100')
     from playwright.sync_api import sync_playwright
-    policy=NetworkPolicy(scope_from_file(args.scope_file))
+    policy=NetworkPolicy(scope_from_file(args.scope_file),graphql_urls=args.graphql_url)
     guard=RunGuard(args.output.parent/'screenshot_guard.sqlite3',max_requests=1000,max_bytes=50*1024*1024,interval=0.5)
     client=ProtectedHTTP(policy,guard)
     args.output.mkdir(parents=True,exist_ok=True)

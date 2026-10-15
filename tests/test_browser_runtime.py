@@ -98,7 +98,7 @@ class BrowserRuntimeTests(unittest.TestCase):
         worker=threading.Thread(target=server.serve_forever,daemon=True); worker.start()
         try:
             with tempfile.TemporaryDirectory() as temp, sync_playwright() as pw:
-                policy=NetworkPolicy(['127.0.0.1'],allowed_ports=[server.server_port])
+                policy=NetworkPolicy(['127.0.0.1'],allowed_ports=[server.server_port],graphql_urls=[f'http://127.0.0.1:{server.server_port}/graphql'])
                 guard=RunGuard(Path(temp)/'state.db',interval=0)
                 try:
                     browser=pw.chromium.launch()

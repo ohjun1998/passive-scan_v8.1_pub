@@ -222,7 +222,7 @@ class V82Tests(unittest.TestCase):
         first=update_analysis(cache,key,'a'*64,'tool-v1',[a]);mapping.write_text(key+'.js\t'+url+'\n')
         reused=reuse_analysis(cache,mapping,'tool-v1');self.assertTrue(reused[0]['asset']['reused'])
         self.assertEqual([],reuse_analysis(cache,mapping,'tool-v2'))
-        current=entries(cache)[key];current['content_hash']='b'*64;cache.write_text(json.dumps(current)+'\n')
+        current=entries(cache)[key];current['content_hash']='b'*64;current['downloaded_at']+=1;cache.write_text(json.dumps(current)+'\n')
         b=js_record({'url':'https://example.test/api/b','method':'POST','bodyParams':['id']},url)
         updated=update_analysis(cache,key,'b'*64,'tool-v1',[b])[0]
         self.assertEqual('changed',updated['asset']['change_kind']);self.assertEqual(1,updated['asset']['removed_count'])

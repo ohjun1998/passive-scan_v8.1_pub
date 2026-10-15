@@ -6,13 +6,14 @@ import os
 import tempfile
 from pathlib import Path
 from .core import private_write,sanitize_value
-from .ai_review import _json,_publish,load_json,read_bytes,validate_result,verify_packet,ASSESSMENTS,CONFIDENCE
-from .review_batch import refresh,serialized
+from .ai_review import (_json,_publish,load_json,read_bytes,validate_result,verify_packet,ASSESSMENTS,CONFIDENCE,
+                        bounded_json,AGGREGATE_LIMIT,INPUT_LIMIT)
+from .review_batch import _refresh,serialized
 
 
 @serialized
 def batch_report(directory,output):
-    coverage=refresh(directory);aggregate=load_json(Path(directory)/'aggregate.json',16*1024*1024)
+    coverage=_refresh(directory);aggregate=load_json(Path(directory)/'aggregate.json',AGGREGATE_LIMIT)
     counts={'codex_verified':0,'manual_or_unverified':0,'incomplete':0}
     for spec in coverage['packets']:
         if spec['status']!='completed':
@@ -30,7 +31,9 @@ def batch_report(directory,output):
         f"완료 묶음 {coverage['summary']['completed_packets']} / 전체 {coverage['summary']['packets']}",
         '실제 Codex 실행 확인: '+str(counts['codex_verified'])+' / '+str(len(coverage['packets'])),
         '수동·미검증 결과: '+str(counts['manual_or_unverified'])+' / 미완료: '+str(counts['incomplete']),
-        '진단 상태: '+json.dumps(coverage['summary']['stages'],ensure_ascii=False),'']
+        '진단 상태: '+json.dumps(coverage['summary']['stages'],ensure_ascii=False),
+        '저장 비교 묶음 범위: '+json.dumps(coverage['summary'].get('comparison_packets',{}),ensure_ascii=False),
+        '분할된 비교 묶음은 일부 증거만 포함하며 마스킹된 선택자로 같은 자원임을 확정하지 않습니다.','']
     for i,review in enumerate(aggregate['reviews'],1):
         draft=review['report_draft']
         lines+=['## '+str(i)+'. '+draft['title'],'',ASSESSMENTS[review['assessment']]+' / '+CONFIDENCE[review['confidence']],review['reason'],'',
@@ -40,7 +43,8 @@ def batch_report(directory,output):
         lines+=['추가 확인:']+['- '+x for x in review['next_checks']]+['']
     text='\n'.join(lines)+'\n'
     page='<!doctype html><html lang="ko"><meta charset="utf-8"><title>AI 검토</title><style>body{max-width:1100px;margin:32px auto;padding:16px;font:16px/1.7 sans-serif}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><h1>저장 증거 AI 검토</h1><pre>'+html.escape(text)+'</pre></html>'
-    return _publish(output,{'aggregate.json':_json(aggregate),'coverage.json':_json(coverage),'review.md':text,'index.html':page,
+    if max(len(text.encode()),len(page.encode()))>INPUT_LIMIT:raise ValueError('Report artifact size limit exceeded')
+    return _publish(output,{'aggregate.json':bounded_json(aggregate,AGGREGATE_LIMIT),'coverage.json':bounded_json(coverage,AGGREGATE_LIMIT),'review.md':text,'index.html':page,
         'execution.json':_json({'provider':'batch_aggregate','human_confirmation_required':True,'target_requests_sent':0,
             'model_execution_verified':all_verified,'packet_execution_counts':counts,
             'subscription_plan_verified':False,
@@ -49,12 +53,15 @@ def batch_report(directory,output):
 
 def _read_report(directory):
     directory=Path(directory);manifest=load_json(directory/'manifest.json')
+    if not isinstance(manifest,dict) or not isinstance(manifest.get('files'),dict):raise ValueError('Invalid report manifest')
+    required={'aggregate.json','coverage.json','execution.json'} if (directory/'aggregate.json').exists() else {'packet.json','ai_review.json','execution.json'}
+    if not required<=set(manifest['files']):raise ValueError('Incomplete report manifest')
     for name,expected in manifest.get('files',{}).items():
         path=Path(name)
         if path.is_absolute() or '..' in path.parts:raise ValueError('Invalid report receipt path')
-        if hashlib.sha256(read_bytes(directory/path,16*1024*1024)).hexdigest()!=expected:raise ValueError('Report file changed')
+        if hashlib.sha256(read_bytes(directory/path,INPUT_LIMIT)).hexdigest()!=expected:raise ValueError('Report file changed')
     if (directory/'aggregate.json').exists():
-        result=load_json(directory/'aggregate.json',16*1024*1024)
+        result=load_json(directory/'aggregate.json',AGGREGATE_LIMIT)
         return result['reviews'],result.get('coverage',{}),load_json(directory/'execution.json')
     packet=verify_packet(load_json(directory/'packet.json',2*1024*1024))
     result=validate_result(load_json(directory/'ai_review.json'),packet)

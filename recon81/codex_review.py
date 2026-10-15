@@ -63,11 +63,15 @@ def make_prompt(packet):
 # Model authentication uses the user's existing Codex ChatGPT login. No API-key fallback.
 import os
 import re
+import hashlib
+import shutil
 import signal
 import subprocess
 import tempfile
 import threading
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 DISABLED_FEATURES = ('shell_tool', 'unified_exec', 'apps', 'multi_agent', 'remote_plugin',
@@ -75,6 +79,20 @@ DISABLED_FEATURES = ('shell_tool', 'unified_exec', 'apps', 'multi_agent', 'remot
                      'browser_use_full_cdp_access', 'computer_use', 'image_generation', 'view_image',
                      'skill_search', 'skill_mcp_dependency_install')
 PROCESS_LIMIT = 2 * 1024 * 1024
+_configuration_cache = ContextVar('codex_review_configuration', default=None)
+
+
+@contextmanager
+def configuration_session():
+    """Reuse successful local preflight only for this synchronous review run."""
+    cache = {'owner': (os.getpid(), threading.get_ident())}
+    token = _configuration_cache.set(cache)
+    try:
+        yield
+    finally:
+        # Also invalidate copies of this context retained by another task.
+        cache.clear()
+        _configuration_cache.reset(token)
 
 
 def _environment():
@@ -107,6 +125,7 @@ def _process(args, cwd, timeout, prompt=None, on_event=None, first_response_time
     execution_seen = threading.Event()
     event_count = [0]
     forbidden_activity = threading.Event()
+    monitored = on_event is not None or first_response_timeout is not None
     started = time.monotonic()
     def collect(stream, index):
         pending = bytearray()
@@ -120,7 +139,7 @@ def _process(args, cwd, timeout, prompt=None, on_event=None, first_response_time
                     _stop(process)
                     break
                 buffers[index].extend(data)
-            if index == 0 and on_event:
+            if index == 0 and monitored:
                 pending.extend(data)
                 while b'\n' in pending:
                     line, _, rest = pending.partition(b'\n'); pending = bytearray(rest)
@@ -134,12 +153,14 @@ def _process(args, cwd, timeout, prompt=None, on_event=None, first_response_time
                         if kind in allowed_events:
                             execution_seen.set()
                             event_count[0] += 1
-                        on_event({'type':kind if kind in allowed_events else 'unrecognized_event',
-                                  'item_type':item_type if item_type in allowed_items else 'unrecognized_item' if item_type else ''})
+                        if on_event:
+                            on_event({'type':kind if kind in allowed_events else 'unrecognized_event',
+                                      'item_type':item_type if item_type in allowed_items else 'unrecognized_item' if item_type else ''})
                         if kind in ('item.started','item.updated','item.completed') and item_type not in allowed_items:
                             forbidden_activity.set(); _stop(process)
                     except (ValueError, UnicodeError, TypeError, AttributeError):
-                        on_event({'type': 'unparseable_event', 'item_type': ''})
+                        if on_event:
+                            on_event({'type': 'unparseable_event', 'item_type': ''})
         stream.close()
     def write():
         try:
@@ -159,20 +180,23 @@ def _process(args, cwd, timeout, prompt=None, on_event=None, first_response_time
     try:
         while True:
             elapsed = time.monotonic() - started
-            if elapsed >= timeout: raise subprocess.TimeoutExpired(args, timeout)
-            if first_response_timeout and not response_seen.is_set() and elapsed >= first_response_timeout:
-                code = 'FIRST_RESPONSE_TIMEOUT' if execution_seen.is_set() else 'CLI_EVENT_TIMEOUT'
-                raise ReviewFailure(code, 'response' if execution_seen.is_set() else 'startup', diagnostic())
+            deadline = timeout
+            if first_response_timeout is not None and not response_seen.is_set():
+                deadline = min(deadline, first_response_timeout)
+            if elapsed >= deadline:
+                # At equal/clamped deadlines retain the observed startup/response state.
+                if monitored and not response_seen.is_set():
+                    code = 'FIRST_RESPONSE_TIMEOUT' if execution_seen.is_set() else 'CLI_EVENT_TIMEOUT'
+                    stage = 'response' if execution_seen.is_set() else 'startup'
+                else:
+                    code, stage = 'EXECUTION_TIMEOUT', 'response'
+                raise ReviewFailure(code, stage, diagnostic())
             try:
-                process.wait(timeout=min(.25, timeout-elapsed)); break
+                process.wait(timeout=min(.25, deadline-elapsed)); break
             except subprocess.TimeoutExpired: pass
     except ReviewFailure:
         _stop(process); process.wait()
         raise
-    except subprocess.TimeoutExpired:
-        _stop(process)
-        process.wait()
-        raise ReviewFailure('EXECUTION_TIMEOUT', 'response', diagnostic()) from None
     finally:
         # Reap descendants retaining pipe handles, even when the parent exited.
         if os.name == 'posix':
@@ -192,7 +216,56 @@ def _process(args, cwd, timeout, prompt=None, on_event=None, first_response_time
     return buffers[0].decode('utf-8'), buffers[1].decode('utf-8')
 
 
+def _configuration_snapshot(cwd):
+    """Detect configuration, credential, environment and CLI changes between packets."""
+    environment = _environment()
+    home = Path(environment.get('CODEX_HOME') or Path.home() / '.codex')
+    files = {home / name for name in ('config.toml', 'auth.json', 'managed_config.toml', 'requirements.toml')}
+    files.update(Path('/etc/codex') / name for name in ('config.toml', 'managed_config.toml', 'requirements.toml'))
+    directory = Path(cwd).resolve()
+    files.update(parent / '.codex' / 'config.toml' for parent in (directory, *directory.parents))
+    fingerprints = []
+    try:
+        executable = shutil.which('codex', path=environment.get('PATH'))
+        identity = None
+        if executable:
+            stat = Path(executable).stat()
+            identity = (executable, stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+        for path in sorted(files):
+            try:
+                with path.open('rb') as stream:
+                    content = stream.read(PROCESS_LIMIT + 1)
+            except FileNotFoundError:
+                continue
+            if len(content) > PROCESS_LIMIT:
+                return None  # An unbounded/unreadable config cannot be cached safely.
+            fingerprints.append((str(path), hashlib.sha256(content).digest()))
+    except OSError:
+        return None
+    return tuple(sorted(environment.items())), identity, tuple(fingerprints)
+
+
 def _configuration(cwd, progress=None):
+    cache = _configuration_cache.get()
+    if cache is None or cache.get('owner') != (os.getpid(), threading.get_ident()):
+        return _read_configuration(cwd, progress)
+    snapshot = _configuration_snapshot(cwd)
+    if snapshot is not None and cache.get('snapshot') == snapshot:
+        if progress:
+            for stage in ('authentication', 'capabilities', 'mcp_configuration'):
+                progress(stage)
+        return list(cache['flags'])
+    cache.pop('snapshot', None)
+    cache.pop('flags', None)
+    flags = _read_configuration(cwd, progress)
+    if snapshot is not None:
+        if snapshot != _configuration_snapshot(cwd):
+            raise ReviewFailure('CLI_CONFIGURATION_CHANGED', 'preflight')
+        cache.update(snapshot=snapshot, flags=tuple(flags))
+    return flags
+
+
+def _read_configuration(cwd, progress=None):
     if progress: progress("authentication")
     stdout, stderr = _process(['codex', 'login', 'status'], cwd, 20)
     status = (stdout + stderr).lower()
@@ -215,8 +288,10 @@ def _configuration(cwd, progress=None):
         if feature in available:
             flags += ['-c', 'features.' + feature + '=false']
     for server in servers:
+        if not isinstance(server, dict):
+            raise ValueError('Unsupported MCP server configuration')
         name = server.get('name', '')
-        if not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', name):
+        if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', name):
             raise ValueError('Unsupported MCP server name')
         flags += ['-c', 'mcp_servers.' + name + '.enabled=false']
     return flags
@@ -321,7 +396,7 @@ def _validate_events(text):
 
 
 def run_review(report, output, patterns, max_records=100, max_bytes=500000, timeout=600, model=None):
-    from .ai_review import build_packet, load_json, render_review, SCHEMA
+    from .ai_review import build_packet, render_review, SCHEMA
     if not 10 <= timeout <= 3600:
         raise ValueError('Invalid Codex timeout')
     if model is not None and (not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}', model)
@@ -330,17 +405,8 @@ def run_review(report, output, patterns, max_records=100, max_bytes=500000, time
     if Path(output).exists() or Path(output).is_symlink():
         raise ValueError('Use a new output directory')
     packet = build_packet(report, patterns, max_records, max_bytes)
-    with tempfile.TemporaryDirectory(prefix='passive-ai-') as directory:
-        from .core import private_write
-        private_write(Path(directory) / 'schema.json', _json(SCHEMA))
-        flags = _configuration(directory)
-        args = _execution_args(directory, flags, model)
-        events, _ = _process(args, directory, timeout, make_prompt(packet))
-        _validate_events(events)
-        result = load_json(Path(directory) / 'result.json')
-    return render_review(packet, result, output, {'provider': 'codex_chatgpt_login', 'status': 'completed',
-        'model_execution_verified': True, 'subscription_plan_verified': False, 'requested_model': model,
-        'tools_disabled': True, 'completion_events_verified': True})
+    result, execution = _execute_review_packet(packet, SCHEMA, timeout, model)
+    return render_review(packet, result, output, execution)
 
 
 class ReviewFailure(ValueError):
@@ -354,13 +420,19 @@ class ReviewFailure(ValueError):
 
 def execute_packet(packet, timeout=300, model=None, progress=None, first_response_timeout=60):
     """v8.5 bounded execution with safe diagnostics. No target client or API-key fallback."""
-    from .ai_review import verify_packet, validate_result, load_json
     from .review_evidence import SCHEMA85
+    if not isinstance(packet, dict) or packet.get('schema_version') != '8.5':
+        raise ReviewFailure('INVALID_EXECUTION_SETTINGS', 'preflight')
+    return _execute_review_packet(packet, SCHEMA85, timeout, model, progress, first_response_timeout)
+
+
+def _execute_review_packet(packet, schema, timeout, model=None, progress=None, first_response_timeout=60):
+    """One monitored, fail-closed transport for legacy and batch evidence packets."""
+    from .ai_review import verify_packet, validate_result, load_json
     from .core import private_write
     verify_packet(packet)
-    if packet.get('schema_version') != '8.5':
-        raise ReviewFailure('INVALID_EXECUTION_SETTINGS', 'preflight')
     _execution_settings(timeout, model, first_response_timeout)
+    result_stage = 'citation_validation' if packet.get('schema_version') == '8.5' else 'result_validation'
     stage = 'preflight'
     def update(value, event=None):
         nonlocal stage
@@ -368,7 +440,7 @@ def execute_packet(packet, timeout=300, model=None, progress=None, first_respons
         if progress: progress(value, event)
     try:
         with tempfile.TemporaryDirectory(prefix='passive-ai-') as directory:
-            private_write(Path(directory)/'schema.json', _json(SCHEMA85))
+            private_write(Path(directory)/'schema.json', _json(schema))
             flags=_configuration(directory, update)
             args = _execution_args(directory, flags, model)
             update('submission')
@@ -380,18 +452,19 @@ def execute_packet(packet, timeout=300, model=None, progress=None, first_respons
                               first_response_timeout=min(first_response_timeout,timeout))
             update('completion_validation')
             _validate_events(events)
-            update('citation_validation')
+            update(result_stage)
             if not (Path(directory) / 'result.json').is_file():
-                raise ReviewFailure('RESULT_MISSING', 'citation_validation')
+                raise ReviewFailure('RESULT_MISSING', result_stage)
             result=validate_result(load_json(Path(directory)/'result.json'),packet)
     except ReviewFailure as error:
         # Map process failures to the actual last known stage, without echoing stderr.
         raise ReviewFailure(error.code, stage if error.stage=='process' else error.stage, error.diagnostic) from None
     except FileNotFoundError:
-        code = 'RESULT_MISSING' if stage == 'citation_validation' else 'CLI_NOT_FOUND'
+        code = 'RESULT_MISSING' if stage == result_stage else 'CLI_NOT_FOUND'
         raise ReviewFailure(code, stage) from None
     except (ValueError,KeyError,TypeError,RecursionError,OSError):
         raise ReviewFailure('INVALID_COMPLETION_OR_RESULT', stage) from None
     return result, {'provider':'codex_chatgpt_login','status':'completed','model_execution_verified':True,
         'subscription_plan_verified':False,'requested_model':model,'tools_disabled':True,
-        'completion_events_verified':True,'citation_validation':'verified'}
+        'completion_events_verified':True,
+        'citation_validation':'verified' if packet.get('schema_version') == '8.5' else 'legacy_unverified'}

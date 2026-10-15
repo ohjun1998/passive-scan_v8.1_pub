@@ -3,6 +3,7 @@ import copy
 import hashlib
 import html
 import json
+import os
 import re
 import shutil
 import tempfile
@@ -14,6 +15,23 @@ ASSESSMENTS = {'suspicious': '의심 항목', 'likely_benign': '정상 동작 �
 CONFIDENCE = {'low': '낮음', 'medium': '보통', 'high': '높음'}
 INPUT_LIMIT = 128 * 1024 * 1024
 RESULT_LIMIT = 1024 * 1024
+AGGREGATE_LIMIT = 16 * 1024 * 1024
+
+
+def bounded_json(value, limit=RESULT_LIMIT):
+    """Use the same representation and byte budget when saving and loading JSON."""
+    text = canonical(value) + '\n'
+    if len(text.encode('utf-8')) > limit:
+        raise ValueError('Serialized JSON size limit exceeded')
+    return text
+
+
+def validate_source_manifest(manifest, receipts):
+    if not isinstance(manifest, dict) or not isinstance(manifest.get('files'), dict):
+        raise ValueError('Invalid source manifest')
+    for name, expected in receipts.items():
+        if manifest['files'].get(name) != expected:
+            raise ValueError('Source report receipt mismatch; regenerate the report')
 
 def text_schema(limit):
     return {'type': 'string', 'maxLength': limit}
@@ -167,10 +185,8 @@ def build_packet(report, patterns, max_records=100, max_bytes=500000):
     source_run_id = None
     if manifest_path.exists():
         manifest = load_json(manifest_path)
-        for name, expected in receipts.items():
-            if manifest.get('files', {}).get(name) != expected:
-                raise ValueError('Source report receipt mismatch; regenerate the report')
-        source_run_id = manifest.get('run_id')
+        validate_source_manifest(manifest, receipts)
+        source_run_id = sanitize_value(manifest.get('run_id'))
     records = [json.loads(line, parse_constant=invalid_json_constant, object_pairs_hook=_no_duplicates)
                for line in requests.decode('utf-8').splitlines() if line.strip()]
     analysis = json.loads(analysis_bytes, parse_constant=invalid_json_constant, object_pairs_hook=_no_duplicates)
@@ -178,7 +194,7 @@ def build_packet(report, patterns, max_records=100, max_bytes=500000):
     scoped.sort(key=lambda r: (not r.get('observed'), -(r.get('triage') or {}).get('score', 0), r['observation_id']))
     packet = {'schema_version': '8.4', 'source_run_id': source_run_id,
               'scope': {'patterns': scope.patterns}, 'source_receipts': receipts,
-              'source_manifest_verified': source_run_id is not None,
+              'source_manifest_verified': manifest_path.exists(),
               'evidence_trust': 'untrusted_captured_data', 'network_requests_sent': 0,
               'budget': {'max_records': max_records, 'max_bytes': max_bytes, 'body_max_bytes': 8192},
               'evidence': [], 'analysis': {'comparisons': []},
@@ -223,17 +239,33 @@ def _publish(output, files):
         raise ValueError('Use a new output directory; existing reports are never overwritten')
     output.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     staging = Path(tempfile.mkdtemp(prefix='.ai-review-', dir=output.parent))
+    reserved = False
     try:
         for name, value in files.items():
+            if Path(name).is_absolute() or '..' in Path(name).parts:
+                raise ValueError('Invalid output path')
             private_write(staging / name, value)
         receipts = {name: hashlib.sha256(value.encode()).hexdigest() for name, value in files.items()}
         private_write(staging / 'manifest.json', _json({'schema_version': '8.4', 'files': receipts}))
-        # mkdir reserves output exclusively; move individual files only after every write succeeded.
+        # Reserve exclusively, then publish the complete tree in one directory rename.
+        # An interrupted reservation is empty; it never looks like a partial accepted result.
         output.mkdir(mode=0o700)
-        for child in staging.iterdir():
-            child.rename(output / child.name)
+        reserved = True
+        if os.name == 'nt':
+            # Windows cannot replace an empty directory; mkdir still rejects existing outputs.
+            output.rmdir()
+            staging.rename(output)
+        else:
+            os.replace(staging, output)
+        reserved = False
     finally:
-        shutil.rmtree(staging)
+        if reserved and output.exists():
+            try:
+                output.rmdir()
+            except OSError:
+                pass
+        if staging.exists():
+            shutil.rmtree(staging)
     return output
 
 
@@ -249,6 +281,7 @@ def prepare_review(report, output, patterns, max_records=100, max_bytes=500000):
 
 def render_review(packet, result, output, execution):
     result = validate_result(result, packet)
+    result_text = bounded_json(result)
     reviewed = {oid for r in result['reviews'] for oid in r['observation_ids']}
     selected = len(packet['evidence'])
     lines = ['# 저장 증거 AI 검토 보고서', '', 'AI 의견이며 취약점 확정·제출 승인은 사람이 수행합니다.', '',
@@ -277,7 +310,7 @@ def render_review(packet, result, output, execution):
     execution = dict(execution, packet_id=packet['packet_id'], selected_evidence=selected,
                      reviewed_evidence=len(reviewed), unreviewed_evidence=selected-len(reviewed),
                      target_requests_sent=0, human_confirmation_required=True)
-    return _publish(output, {'packet.json': _json(packet), 'ai_review.json': _json(result),
+    return _publish(output, {'packet.json': _json(packet), 'ai_review.json': result_text,
                            'review.md': markdown, 'index.html': page, 'execution.json': _json(execution),
                            'citations.json': _json(validate_citations(result, packet) if packet.get('schema_version') == '8.5' else [])})
 

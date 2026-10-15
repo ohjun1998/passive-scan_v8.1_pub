@@ -7,7 +7,7 @@ import sqlite3
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from recon81 import __version__
-from recon81.core import Inventory, Scope
+from recon81.core import Inventory, Scope, normalize_resource_headers
 from recon81.importers import load_records
 from recon81.context import attach_context, clean_context, STATES
 
@@ -45,6 +45,7 @@ def main(argv=None):
     imp.add_argument('--base-url', help='Original JS URL used to resolve relative endpoints')
     imp.add_argument('--include-text', action='store_true', help='Retain free text using best-effort redaction; review before sharing')
     imp.add_argument('--db', type=Path, default=Path('reports/request_inventory.sqlite3'))
+    imp.add_argument('--resource-header', action='append', default=[], help='Non-secret header that selects a resource; repeatable')
     scope_args(imp)
     label_args(imp)
     rep = commands.add_parser('report', help='Local HTML / JSONL / Postman review collection / optional XLSX')
@@ -52,6 +53,7 @@ def main(argv=None):
     rep.add_argument('--output', type=Path, default=Path('reports/requests'))
     rep.add_argument('--xlsx', action='store_true')
     rep.add_argument('--ignore-response-field',action='append',default=[],help='Exact JSON path ignored for comparison only; evidence remains intact')
+    rep.add_argument('--resource-header', action='append', default=[], help='Include this non-secret resource selector in comparison identity; repeatable')
     scope_args(rep)
     review=commands.add_parser('review',help='Save a human review conclusion or import dashboard review edits')
     review.add_argument('--db',type=Path,default=Path('reports/request_inventory.sqlite3'))
@@ -63,12 +65,15 @@ def main(argv=None):
     try:
         if args.command == 'import':
             scope = parse_scope(args)
+            resource_headers = normalize_resource_headers(args.resource_header)
             total = skipped = 0
             # One transaction for all inputs: invalid input cannot leave a partial import.
             with Inventory(args.db) as inventory:
                 for path in args.inputs:
                     for record in load_records(path, args.format, args.base_url, args.include_text):
                         if scope.allows(record['url']):
+                            if resource_headers:
+                                record['resource_headers'] = normalize_resource_headers([*record.get('resource_headers', []), *resource_headers])
                             context=dict(record.get('context') or {})
                             context.update(labels(args))
                             inventory.add(attach_context(record,context))
@@ -94,10 +99,12 @@ def main(argv=None):
                 raise ValueError('Inventory DB does not exist; import data first')
             from recon81.reports import generate
             with Inventory(args.db) as inventory:
-                records=list(inventory.records())
-                if args.scope or args.scope_file:
-                    scope=parse_scope(args); records=[r for r in records if scope.allows(r['url'])]
-                count = generate(records, args.output, args.xlsx, ignore_fields=args.ignore_response_field)
+                scope = parse_scope(args) if args.scope or args.scope_file else None
+                records = [r for r in inventory.records() if scope is None or scope.allows(r['url'])]
+                selected = {r['observation_id'] for r in records}
+                events = (event for event in inventory.capture_events() if event['observation_id'] in selected)
+                count = generate(records, args.output, args.xlsx, ignore_fields=args.ignore_response_field,
+                                 capture_events=events, resource_headers=normalize_resource_headers(args.resource_header))
             print(json.dumps({'reported_records': count, 'output': str(args.output), 'network_requests_sent': 0}))
         return 0
     except (ValueError, KeyError, OSError, TypeError, RecursionError, ET.ParseError, sqlite3.Error) as error:
