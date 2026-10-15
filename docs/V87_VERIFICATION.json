@@ -1,0 +1,157 @@
+{
+  "version": "8.7.0",
+  "checked_at": "2026-10-15T12:24:16.538889+00:00",
+  "local_tests": {
+    "total": 294,
+    "passed": 290,
+    "skipped": 4,
+    "new_candidate_tests": 21,
+    "optional_skips": "Real Chromium 2 and pinned httpx/Katana 2 are covered by separate GitHub CI jobs."
+  },
+  "mixed_synthetic_fixture": {
+    "summary": {
+      "ai_failed_packets": 0,
+      "ai_not_reviewed_candidates": 0,
+      "ai_oversized_candidates": 0,
+      "ai_reviewed_by_kind": {
+        "authorization": 1,
+        "credential_exposure": 1,
+        "idor": 1,
+        "sensitive_data": 1,
+        "sqli": 1,
+        "xss": 1
+      },
+      "ai_reviewed_candidates": 6,
+      "ai_selected_candidates": 6,
+      "by_kind": {
+        "authorization": 1,
+        "credential_exposure": 1,
+        "idor": 1,
+        "sensitive_data": 1,
+        "sqli": 1,
+        "xss": 1
+      },
+      "candidates": 6,
+      "confirmed_vulnerabilities": 0,
+      "elapsed_seconds": 31.551,
+      "model_calls": 1,
+      "model_phase_seconds": 31.544,
+      "out_of_scope_records": 0,
+      "reproduction_verified": 0,
+      "rule_processed_records": 12,
+      "source_records": 12,
+      "target_requests_sent": 0
+    },
+    "dispositions": {
+      "needs_context": 5,
+      "retain": 1
+    },
+    "source_manifest_verified": true,
+    "all_completed_receipts_verified": true,
+    "subscription_plan_verified": false,
+    "settings": {
+      "batch_size": 6,
+      "first_response_timeout": 180,
+      "max_candidates": 6,
+      "requested": true,
+      "requested_model": null,
+      "timeout": 300,
+      "workers": 2
+    }
+  },
+  "mixed_fixture_note": "12 synthetic records; one rule lead for each of six types. Normal owner, escaped HTML, plain HTML text, JSON reflection, OAuth issuance and health controls are not subjects. Model completed six short opinions, not six confirmed vulnerabilities.",
+  "existing_saved_evidence_rules_only": {
+    "ai_failed_packets": 0,
+    "ai_not_reviewed_candidates": 29,
+    "ai_oversized_candidates": 0,
+    "ai_reviewed_by_kind": {},
+    "ai_reviewed_candidates": 0,
+    "ai_selected_candidates": 0,
+    "by_kind": {
+      "authorization": 6,
+      "credential_exposure": 3,
+      "idor": 7,
+      "sensitive_data": 13
+    },
+    "candidates": 29,
+    "confirmed_vulnerabilities": 0,
+    "elapsed_seconds": 0.077,
+    "model_calls": 0,
+    "model_phase_seconds": 0.0,
+    "out_of_scope_records": 0,
+    "reproduction_verified": 0,
+    "rule_processed_records": 77,
+    "source_records": 77,
+    "target_requests_sent": 0
+  },
+  "existing_saved_evidence_with_ai": {
+    "summary": {
+      "ai_failed_packets": 0,
+      "ai_not_reviewed_candidates": 5,
+      "ai_oversized_candidates": 0,
+      "ai_reviewed_by_kind": {
+        "authorization": 6,
+        "credential_exposure": 3,
+        "idor": 7,
+        "sensitive_data": 8
+      },
+      "ai_reviewed_candidates": 24,
+      "ai_selected_candidates": 24,
+      "by_kind": {
+        "authorization": 6,
+        "credential_exposure": 3,
+        "idor": 7,
+        "sensitive_data": 13
+      },
+      "candidates": 29,
+      "confirmed_vulnerabilities": 0,
+      "elapsed_seconds": 67.27,
+      "model_calls": 3,
+      "model_phase_seconds": 67.188,
+      "out_of_scope_records": 0,
+      "reproduction_verified": 0,
+      "rule_processed_records": 77,
+      "source_records": 77,
+      "target_requests_sent": 0
+    },
+    "dispositions": {
+      "retain": 15,
+      "needs_context": 2,
+      "dismiss": 7
+    },
+    "source_manifest_verified": true,
+    "all_completed_receipts_verified": true,
+    "subscription_plan_verified": false,
+    "settings": {
+      "batch_size": 8,
+      "first_response_timeout": 180,
+      "max_candidates": 24,
+      "requested": true,
+      "requested_model": null,
+      "timeout": 300,
+      "workers": 2
+    }
+  },
+  "authorization_label_rule_alignment": {
+    "cases": 50,
+    "suspicious_cases_selected_as_auth_subjects": 13,
+    "benign_cases_not_selected_as_auth_subjects": 37,
+    "scope": "Only IDOR/authorization rule subjects against existing authorization labels. Does not measure model verdict accuracy or other vulnerability classes."
+  },
+  "performance_note": "The former 36-packet full-review run and the new 3-call/24-candidate run do different work. Timing is one local observation, not an equal-coverage speedup benchmark. Five candidates remain AI-unreviewed.",
+  "privacy": {
+    "original_traffic_published": false,
+    "credential_literals_published": false
+  },
+  "target_requests_sent": 0,
+  "key_validations_sent": 0,
+  "confirmed_vulnerabilities": 0,
+  "automatic_reproductions": 0,
+  "limitations": [
+    "Rules cover supported signals only; no absence-of-vulnerability conclusion.",
+    "Mixed fixture is synthetic, not an independent real-world accuracy benchmark.",
+    "Existing 50 labels all concern authorization; they establish no XSS/SQLi/secrets precision or recall.",
+    "Prior v8.6.1 results and two control-association false positives are preserved.",
+    "No cross-run model cache, automatic retries, active reproduction or final vulnerability verdict is added."
+  ]
+}

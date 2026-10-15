@@ -1,6 +1,40 @@
 # 유스케이스와 기능 변경
 
-현재 비교 기준: **8.6.0 → 8.6.1**. [AI 실행 수정 안내](V861.md) · [남은 단계](REMAINING_STEPS.md). 아래 이전 버전의 전체 프로세스와 변경 기록도 유지합니다.
+현재 비교 기준: **8.6.1 → 8.7.0**. [후보 추천 사용법](V87.md) · [검증 기록](V87_VERIFICATION.json) · [남은 단계](REMAINING_STEPS.md).
+
+## v8.7.0 — 여러 취약점 유형의 후보 추천
+
+주황/신규는 유형별 후보와 선택적 짧은 AI 검토, 파랑/개선은 근거·대조군·커버리지 표시, 회색/유지는 기존 저장 자료와 로그인입니다. 진단자·검토자는 시스템 경계 밖에 있습니다.
+
+```mermaid
+flowchart TB
+    operator["진단자"]
+    reviewer["검토자"]
+    subgraph system["Passive Scan v8.7.0"]
+        saved(["유지 · 저장 요청·응답 읽기"])
+        rules(["신규 · 6개 유형의 단서 선별"])
+        model(["신규 · 우선 후보만 짧은 AI 검토"])
+        login(["유지 · ChatGPT 로그인 Codex"])
+        report(["개선 · 근거·다음 확인·미검토 표시"])
+    end
+    operator --- saved
+    saved -. "범위 내 저장 본문" .-> rules
+    rules -. "선택적 · 기본 최대 24개" .-> model
+    login -. "기존 인증" .-> model
+    rules -. "전체 후보" .-> report
+    model -. "선택된 후보의 판단" .-> report
+    reviewer --- report
+    classDef added fill:#fff1df,stroke:#d77708,color:#663600
+    classDef changed fill:#e7f3ff,stroke:#2675bb,color:#163e65
+    classDef kept fill:#edf0f3,stroke:#798596,color:#344252
+    class rules,model added
+    class report changed
+    class saved,login kept
+```
+
+전체 수집 프로세스는 아래 v8.6.0 그림을 유지합니다. 새 `recommend`는 저장 자료를 읽는 별도 후처리 경로입니다. IDOR·인가, XSS, SQLi, 민감정보·비밀값 단서를 분리하고 인가 대조군은 `support_ids`, 의심 대상은 `subject_ids`에 둡니다. 규칙 처리 범위와 AI 검토 후보 수를 따로 집계합니다. 자동 재현·추가 대상 요청·비밀값 인증·최종 취약점 확정은 이 단계에 포함하지 않습니다. 기존 `batch-*` 경로와 과거 평가를 보존합니다.
+
+이전 비교 기준: **8.6.0 → 8.6.1**. [AI 실행 수정 안내](V861.md) · [남은 단계](REMAINING_STEPS.md). 아래 이전 버전의 전체 프로세스와 변경 기록도 유지합니다.
 
 ## v8.6.1 — 저장 증거의 실제 AI 분석
 

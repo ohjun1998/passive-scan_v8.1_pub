@@ -1,4 +1,4 @@
-name: v8.6 evidence and transport verification
+name: v8.7 candidates, evidence and transport verification
 on:
   push:
     branches: [main]
@@ -32,6 +32,8 @@ jobs:
           python ai_review.py prepare --report reports/requests --scope example.test --output reports/ai-prepared
           python review_queue.py build --scope-file examples/scope.txt
           python examples/v85/demo.py --output reports/v85-demo
+          python examples/v87/demo.py --output reports/v87-demo
+          python ai_review.py recommend --report reports/v87-demo/base --scope example.test --output reports/v87-cli
   browser-fixture:
     runs-on: ubuntu-latest
     timeout-minutes: 10

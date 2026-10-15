@@ -44,6 +44,13 @@ def main(argv=None):
     p = sub.add_parser('evaluate'); p.add_argument('--review', required=True); p.add_argument('--labels', required=True); p.add_argument('--output', required=True)
     p = sub.add_parser('pdf'); p.add_argument('--review', required=True); p.add_argument('--output', required=True)
     p.add_argument('--font'); p.add_argument('--max-reviews', type=int, default=200)
+    p = sub.add_parser('recommend', help='Offline multi-type candidate recommendations; --ai adds short, bounded model review')
+    p.add_argument('--report', required=True); p.add_argument('--output', required=True)
+    p.add_argument('--scope', action='append', required=True); p.add_argument('--authority')
+    p.add_argument('--ai', action='store_true'); p.add_argument('--ai-limit', type=int, default=24)
+    p.add_argument('--ai-batch-size', type=int, default=8); p.add_argument('--ai-workers', type=int, default=2)
+    p.add_argument('--timeout', type=int, default=300); p.add_argument('--first-response-timeout', type=int, default=180)
+    p.add_argument('--model')
     args = parser.parse_args(argv)
     try:
         if args.command == 'doctor':
@@ -83,6 +90,15 @@ def main(argv=None):
         elif args.command == 'pdf':
             from recon81.review_reporting import export_pdf
             export_pdf(args.review,args.output,args.font,args.max_reviews)
+        elif args.command == 'recommend':
+            import json
+            from recon81.candidate_report import create_recommendations
+            from recon81.ai_review import load_json
+            result = create_recommendations(args.report,args.output,args.scope,
+                load_json(args.authority) if args.authority else None,args.ai,args.ai_limit,args.ai_batch_size,
+                args.ai_workers,args.timeout,args.model,args.first_response_timeout)
+            print(json.dumps(result['summary'],ensure_ascii=False))
+            if result['summary']['ai_failed_packets']: return 3
         else:
             from recon81.codex_review import run_review
             run_review(args.report, args.output, args.scope, args.max_records, args.max_bytes, args.timeout, args.model)

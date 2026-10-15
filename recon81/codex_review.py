@@ -488,11 +488,21 @@ def execute_packet(packet, timeout=300, model=None, progress=None, first_respons
 
 def _execute_review_packet(packet, schema, timeout, model=None, progress=None, first_response_timeout=60):
     """One monitored, fail-closed transport for legacy and batch evidence packets."""
-    from .ai_review import verify_packet, validate_result, load_json
-    from .core import private_write
+    from .ai_review import verify_packet, validate_result
     verify_packet(packet)
-    _execution_settings(timeout, model, first_response_timeout)
     result_stage = 'citation_validation' if packet.get('schema_version') == '8.5' else 'result_validation'
+    result, execution = _execute_json(make_prompt(packet), _provider_schema(schema, packet),
+        lambda value: validate_result(value, packet), timeout, model, progress, first_response_timeout, result_stage)
+    execution['citation_validation'] = 'verified' if packet.get('schema_version') == '8.5' else 'legacy_unverified'
+    return result, execution
+
+
+def _execute_json(prompt, schema, validator, timeout=300, model=None, progress=None,
+                  first_response_timeout=180, result_stage='candidate_validation'):
+    """Shared read-only transport; callers supply a strict schema and local validator."""
+    from .ai_review import load_json
+    from .core import private_write
+    _execution_settings(timeout, model, first_response_timeout)
     stage = 'preflight'
     def update(value, event=None):
         nonlocal stage
@@ -500,7 +510,7 @@ def _execute_review_packet(packet, schema, timeout, model=None, progress=None, f
         if progress: progress(value, event)
     try:
         with tempfile.TemporaryDirectory(prefix='passive-ai-') as directory:
-            private_write(Path(directory)/'schema.json', _json(_provider_schema(schema, packet)))
+            private_write(Path(directory)/'schema.json', _json(schema))
             flags=_configuration(directory, update)
             args = _execution_args(directory, flags, model)
             update('submission')
@@ -508,14 +518,14 @@ def _execute_review_packet(packet, schema, timeout, model=None, progress=None, f
                 if item['type'] in ('thread.started','turn.started'): update('response_wait', item)
                 elif item['item_type'] in ('agent_message','reasoning'): update('response', item)
                 else: update(stage, item)
-            events,_=_process(args,directory,timeout,make_prompt(packet),on_event=event,
+            events,_=_process(args,directory,timeout,prompt,on_event=event,
                               first_response_timeout=min(first_response_timeout,timeout))
             update('completion_validation')
             _validate_events(events)
             update(result_stage)
             if not (Path(directory) / 'result.json').is_file():
                 raise ReviewFailure('RESULT_MISSING', result_stage)
-            result=validate_result(load_json(Path(directory)/'result.json'),packet)
+            result=validator(load_json(Path(directory)/'result.json'))
     except ReviewFailure as error:
         # Map process failures to the actual last known stage, without echoing stderr.
         raise ReviewFailure(error.code, stage if error.stage=='process' else error.stage, error.diagnostic) from None
@@ -526,5 +536,4 @@ def _execute_review_packet(packet, schema, timeout, model=None, progress=None, f
         raise ReviewFailure('INVALID_COMPLETION_OR_RESULT', stage) from None
     return result, {'provider':'codex_chatgpt_login','status':'completed','model_execution_verified':True,
         'subscription_plan_verified':False,'requested_model':model,'tools_disabled':True,
-        'completion_events_verified':True,
-        'citation_validation':'verified' if packet.get('schema_version') == '8.5' else 'legacy_unverified'}
+        'completion_events_verified':True, 'output_validation':'verified'}
