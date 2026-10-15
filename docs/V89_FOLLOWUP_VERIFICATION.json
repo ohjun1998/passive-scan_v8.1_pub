@@ -1,0 +1,112 @@
+{
+  "version": "8.9.0",
+  "checked_at": "2026-10-15T14:15:56.931795+00:00",
+  "code_commit": "42a0435ab96d26842e076728ba7365324a850f78",
+  "change_scope": "Documentation and aggregate verification only; no runtime source changes.",
+  "publication": {
+    "pull_request": 9,
+    "merged": true,
+    "main_ci": {
+      "run_id": 38748603701,
+      "conclusion": "success",
+      "jobs": {
+        "test (3.10)": "success",
+        "test (3.12)": "success",
+        "test (3.13)": "success",
+        "browser-fixture": "success",
+        "tool-fixture": "success"
+      }
+    },
+    "source_release": {
+      "run_id": 38748603630,
+      "conclusion": "success",
+      "tag": "v8.9.0",
+      "tag_commit": "42a0435ab96d26842e076728ba7365324a850f78",
+      "prerelease": true,
+      "zip_sha256": "2870c0e0500c53762c194bdd2a61962a2fd752cac8a3b11bd36b62770614d536",
+      "sha256sums_asset_sha256": "ac44b64409d2c86e277f4c61d412bfa34090ad56c66bd597acf30cc30fb7e12c",
+      "utc_git_archive_digest_matches_public_asset": true,
+      "checksum_file_digest_reproduced": true,
+      "existing_release_modified": false
+    }
+  },
+  "offline_saved_lab_verification": {
+    "focused_tests": 65,
+    "passed": true,
+    "validated_candidates": 101,
+    "source_manifest_verified": true,
+    "candidate_ids_and_evidence_digests_match_previous_run": true,
+    "summary": {
+      "ai_eligible_candidates": 38,
+      "ai_excluded_surface_count": 63,
+      "ai_failed_packets": 0,
+      "ai_fresh_reviewed_candidates": 0,
+      "ai_human_dismissed_candidates": 0,
+      "ai_new_unit_budget": 24,
+      "ai_new_units_selected": 0,
+      "ai_not_reviewed_candidates": 101,
+      "ai_oversized_candidates": 0,
+      "ai_reused_candidates": 0,
+      "ai_reviewed_by_kind": {},
+      "ai_reviewed_candidates": 0,
+      "ai_selected_candidates": 0,
+      "by_kind": {
+        "api_testing": 63,
+        "authentication": 4,
+        "authorization": 6,
+        "clickjacking": 5,
+        "credential_exposure": 3,
+        "idor": 7,
+        "sensitive_data": 13
+      },
+      "cache_enabled": false,
+      "cache_invalid_entries": 0,
+      "cache_write_errors": 0,
+      "candidates": 101,
+      "confirmed_vulnerabilities": 0,
+      "discovery_fresh_hypotheses": 0,
+      "discovery_hypotheses": 0,
+      "discovery_new_tasks": 0,
+      "discovery_reused_hypotheses": 0,
+      "discovery_reused_tasks": 0,
+      "elapsed_seconds": 0.237,
+      "model_calls": 0,
+      "model_phase_seconds": 0.0,
+      "out_of_scope_records": 0,
+      "reproduction_verified": 0,
+      "review_surfaces": 63,
+      "rule_processed_records": 77,
+      "signal_candidates": 38,
+      "source_records": 77,
+      "target_dns_lookups": 0,
+      "target_requests_sent": 0
+    }
+  },
+  "additional_ai_review": {
+    "status": "blocked_by_automatic_approval_review",
+    "scope": "Selected masked evidence from 77 previously saved local lab records, sent through ChatGPT-login Codex CLI to its model service.",
+    "reason": "The automatic reviewer requires explicit authorization for the stored traffic payload and external ChatGPT model-service destination.",
+    "new_completion_verified": false,
+    "new_quality_measurement": false,
+    "blocked_route_bypassed": false,
+    "new_result_published": false
+  },
+  "remaining": [
+    "Explicit approval for the specified saved-evidence model transfer before the additional v8.9 review and discovery run.",
+    "Human assessment of operational candidate value and reasons.",
+    "Independent normal/positive labels across vulnerability families for quality measurement."
+  ],
+  "privacy": {
+    "raw_traffic_uploaded": false,
+    "credentials_uploaded": false,
+    "private_cache_uploaded": false,
+    "human_decisions_fabricated": false
+  },
+  "limitations": [
+    "Saved evidence comes from a local lab, not an operational service.",
+    "Candidate and surface counts are not confirmed vulnerabilities.",
+    "65 focused tests include mock model adapters; they do not represent fresh model completion.",
+    "This follow-up does not supersede historical model executions or measurements.",
+    "No new cross-type model accuracy claim."
+  ]
+}
