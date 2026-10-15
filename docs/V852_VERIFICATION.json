@@ -65,8 +65,14 @@
     "same_cookiejar_identities_verified": true,
     "model_execution_verified": false,
     "human_confirmation_required": true,
-    "reproduction_receipt_sha256": "5e3902218a3f19b970c610c7734c2ae40a80c6da058df0752a8f2382220ee3c6",
-    "capture_sha256": "c38e2c8836d27473cdc78542d4981df724f7b49976560b1b3b3691bf204f6cb3"
+    "reproduction_receipt_sha256": "f58abcb3d25469bf3852cbf6308722968d0b0bb2f5622eb451a266eda00a7707",
+    "capture_sha256": "dfa81241336a4027a5bff8623c5ac5c987e1e4f931d77a38d389c23862564a34",
+    "export_integrity": {
+      "raw_records": 61,
+      "report_records": 61,
+      "observation_ids_match": true,
+      "scope": "Final successful run; earlier validation runs are not included"
+    }
   },
   "model_quality_measured": false,
   "local_tests": {
@@ -108,7 +114,8 @@
         "size": 89,
         "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/releases/download/v8.5.2/SHA256SUMS"
       }
-    ]
+    ],
+    "source_zip_checksum_verified": true
   },
   "remaining": [
     "Complete a successful evidence-free CLI probe",
