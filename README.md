@@ -1,12 +1,14 @@
-# Passive Scan v8.8.0
+# Passive Scan v8.9.0
 
 URL 목록과 실제 HTTP 요청/응답을 함께 관리하는 버그바운티 정찰 도구입니다.
 
 원본 `ohjun1998/passive-scan_v8_pub`의 커밋 `56fe674eff848ba516dc1a743879e43c7cd3a12b`를 복사해 만든 별도 프로젝트입니다. 원본 저장소를 수정하거나 원본에서 스캔을 실행하지 않습니다.
 
-현재 버전은 **8.8.0**입니다. PortSwigger Web Security Academy의 취약점 관련 **30개 주제를 33개 추천 유형에 연결**했습니다. SSRF·XXE·경로 탐색·명령어/템플릿/NoSQL 주입·CORS·클릭재킹·캐시·인증 등을 추가하고, API·GraphQL·OAuth/JWT·파일 업로드·경쟁 상태 등은 기능 점검 대상과 결함 단서를 구분합니다. HTML은 기본적으로 단서 후보를 표시하며 유형별 부족한 자료도 보여 줍니다. 원시 전송이 필요한 요청 스머글링은 현재 정규화 자료에서 미평가로 표시합니다. [유형별 구현 범위·사용법](docs/V88.md) · [검증](docs/V88_VERIFICATION.json) · [유스케이스](docs/USE_CASES.md).
+현재 버전은 **8.9.0**입니다. 저장된 요청·응답에 계정 대조·입력 변형·응답 차이·저장 값 흐름을 묶고, 동일 입력의 검증된 AI 결과를 재사용합니다. `--ai --discover`로 규칙 밖 저장 자료에서 제한된 후속 점검 가설을 찾으며, 사람의 채택·기각·보류를 전체 증거 해시에 연결해 다음 추천에 반영합니다. [사용법·제한](docs/V89.md) · [검증](docs/V89_VERIFICATION.json) · [유스케이스](docs/USE_CASES.md) · [남은 단계](docs/REMAINING_STEPS.md).
 
-기본 AI 예산은 24개로 유지하며 단순 기능 발견은 AI 선택에서 제외합니다. 기능 점검 대상까지 짧게 검토하려면 같은 예산 안에서 `--ai --ai-include-surfaces`를 사용합니다. 기존 명령·자동 재현 없음·대상 추가 요청 없음·httpx 20워커와 각 `-rl 10 -t 5`는 유지합니다.
+분석 경로는 **대상 추가 요청·DNS 0건**을 유지합니다. `--ai`는 선택한 마스킹 증거를 ChatGPT 로그인 모델 서버에 전달합니다. 기본 새 검토 예산 24단위를 규칙 후보와 탐색 묶음이 공유하며, 탐색은 기본 최대 4묶음입니다. 과거 결과 재사용은 새 호출과 구분하고 유효한 캐시 적중은 새 예산을 소모하지 않습니다. 자동 재현·키 인증·취약점 확정은 수행하지 않습니다. 수집 경로 httpx 20워커와 각 `-rl 10 -t 5`는 유지합니다.
+
+이전 **8.8.0**에서 PortSwigger Web Security Academy의 취약점 관련 **30개 주제를 33개 추천 유형에 연결**했습니다. 단서 후보·기능 점검 대상·추가 수집 필요를 구분하고 요청 스머글링의 원시 전송 부족을 표시합니다. [유형별 구현 범위](docs/V88.md) · [이전 검증](docs/V88_VERIFICATION.json).
 
 이전 **8.7.0**에서는 저장된 요청·응답을 먼저 규칙으로 선별해 **IDOR, 인가·권한, XSS, SQLi, 민감정보, API KEY·TOKEN·비밀값 후보**를 추천합니다. 선택적으로 우선 후보만 ChatGPT 로그인 Codex CLI에 묶어 짧게 검토시킵니다. 후보별 근거 위치·다음 확인·미검토 상태를 제공하며, 취약점 확정·자동 재현·키 유효성 확인은 수행하지 않습니다. [사용법·제한](docs/V87.md) · [검증 기록](docs/V87_VERIFICATION.json) · [남은 단계](docs/REMAINING_STEPS.md) · [유스케이스](docs/USE_CASES.md).
 
@@ -16,6 +18,12 @@ python ai_review.py recommend --report reports/requests --scope example.test --o
 
 # 우선 후보 최대 24개만 짧게 AI 검토: 최대 8개씩, 동시 실행 2개
 python ai_review.py recommend --report reports/requests --scope example.test --output reports/candidates-ai --ai
+```
+
+```bash
+# 규칙 밖 탐색과 재사용: 매번 새 출력 폴더, 같은 캐시 파일 사용
+python ai_review.py recommend --report reports/requests --scope example.test \
+  --output reports/candidates-discovery --ai --discover --cache reports/candidate-ai-cache.sqlite3
 ```
 
 보고서는 출력 폴더의 `index.html`과 `recommendations.json`입니다. 인가 비교용 `--authority`는 선택 사항이며 다른 취약점 유형에 계정 라벨을 강제하지 않습니다. 기본 규칙 처리는 저장된 본문 전체를 검사하지만 실행 흐름이나 저장되지 않은 증거를 추론해 확정하지 않습니다.

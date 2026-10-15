@@ -5,7 +5,7 @@ from .ai_review import object_schema, text_schema, _validate_schema, HEX
 from .core import digest
 from .candidate_rules import RULE_VERSION, scrub
 
-PROMPT_VERSION = '8.8.0-1'
+PROMPT_VERSION = '8.9.0-2'
 DECISIONS = ('retain', 'dismiss', 'needs_context')
 DECISION_SCHEMA = object_schema({'packet_id': {'type': 'string', 'pattern': HEX},
     'reviews': {'type': 'array', 'minItems': 1, 'maxItems': 12, 'items': object_schema({
@@ -18,9 +18,9 @@ DECISION_SCHEMA = object_schema({'packet_id': {'type': 'string', 'pattern': HEX}
 def make_packet(candidates):
     fields = ('candidate_id', 'kind', 'subject_ids', 'support_ids', 'method', 'url', 'priority',
               'signal_strength', 'reason', 'evidence', 'context', 'authority', 'limitations', 'next_check',
-              'lead_class', 'source_url', 'evidence_context')
-    packet = {'schema_version': '8.8', 'rule_version': RULE_VERSION, 'prompt_version': PROMPT_VERSION,
-              'candidates': [{key: copy.deepcopy(c[key]) for key in fields} for c in candidates]}
+              'lead_class', 'source_url', 'evidence_context', 'evidence_bundle', 'evidence_digest', 'origin')
+    packet = {'schema_version': '8.9', 'rule_version': RULE_VERSION, 'prompt_version': PROMPT_VERSION,
+              'candidates': [{key: copy.deepcopy(c[key]) for key in fields if key in c} for c in candidates]}
     packet['packet_id'] = digest(packet)
     return packet
 
@@ -33,6 +33,8 @@ def prompt_for(packet):
         '각 candidate_id에 정확히 한 번씩 짧게 답하세요. 새 후보·ID·인용·보고서 초안을 만들지 마세요. '
         '증거 위치는 이미 로컬 검증됐지만 의미·취약점은 확인되지 않았습니다. subject_ids만 판단 대상이며 '
         'support_ids는 정상 비교 자료·신원 보조 자료입니다. 대조군을 의심 대상으로 바꾸지 마세요.\n'
+        'evidence_bundle은 관련 저장 맥락입니다. 관계·응답 차이는 인과관계·같은 자원·정상성의 증명이 아닙니다. '
+        '관련 기록을 새 판단 대상으로 바꾸지 말고 각 후보를 독립적으로 검토하세요.\n'
         'PortSwigger 주제에 매핑된 kind별 단서만 판단하세요. source_url은 분류 참고이며 접속하지 마세요. '
         'lead_class=evidence_signal은 단서 후보, review_surface는 기능 점검 대상이며 결함 근거가 아닙니다. '
         '기능·엔드포인트·오류·헤더 부재만으로 취약점이나 높은 위험을 단정하지 마세요. '
@@ -71,5 +73,5 @@ def execute_candidates(packet, timeout=300, model=None, first_response_timeout=1
     schema['properties']['reviews']['items']['properties']['candidate_id']['enum'] = [c['candidate_id'] for c in packet['candidates']]
     result, execution = _execute_json(prompt_for(packet), schema, lambda value: validate_decisions(value, packet),
         timeout, model, first_response_timeout=first_response_timeout)
-    execution.update(candidate_validation='verified', target_requests_sent=0)
+    execution.update(candidate_validation='verified', target_requests_sent=0, prompt_sha256=digest(prompt_for(packet)))
     return result, execution

@@ -25,7 +25,7 @@ def serialized(function):
     return invoke
 
 
-def source(report):
+def source(report, include_analysis=False):
     report=Path(report).resolve();receipts={};content={}
     for name in ('requests.jsonl','analysis.json'):
         data=read_bytes(report/name);receipts[name]=hashlib.sha256(data).hexdigest();content[name]=data
@@ -36,6 +36,10 @@ def source(report):
     records=[json.loads(line,parse_constant=invalid_json_constant,object_pairs_hook=_no_duplicates)
              for line in content['requests.jsonl'].decode().splitlines() if line.strip()]
     if len({r['observation_id'] for r in records})!=len(records):raise ValueError('Duplicate source evidence IDs')
+    if include_analysis:
+        analysis=json.loads(content['analysis.json'],parse_constant=invalid_json_constant,object_pairs_hook=_no_duplicates)
+        if not isinstance(analysis,dict):raise ValueError('Invalid source analysis')
+        return records,receipts,manifest,analysis
     return records,receipts,manifest
 
 

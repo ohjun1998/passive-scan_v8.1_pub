@@ -203,7 +203,7 @@ class AcademyReportTests(unittest.TestCase):
             return {'packet_id': packet['packet_id'], 'reviews': [{'candidate_id': c['candidate_id'], 'disposition': 'needs_context',
                 'priority': 'low', 'reason': '기능 점검 대상입니다.', 'next_check': '정책을 확인하세요.'} for c in packet['candidates']]}, {
                 'status': 'completed', 'provider': 'codex_chatgpt_login', 'candidate_validation': 'verified',
-                'model_execution_verified': True, 'completion_events_verified': True}
+                'model_execution_verified': True, 'tools_disabled': True, 'completion_events_verified': True}
         with patch('recon81.candidate_report.execute_candidates', side_effect=fake):
             with patch('sys.stdout', new_callable=io.StringIO):
                 status = main(['recommend', '--report', str(self.root / 'source'), '--scope', 'example.test',

@@ -1,6 +1,53 @@
 # 유스케이스와 기능 변경
 
-현재 비교 기준: **8.7.0 → 8.8.0**. [공식 주제별 구현 범위](V88.md) · [검증](V88_VERIFICATION.json) · [남은 단계](REMAINING_STEPS.md).
+현재 비교 기준: **8.8.0 → 8.9.0**. [저장 증거 분석 사용법](V89.md) · [검증](V89_VERIFICATION.json) · [남은 단계](REMAINING_STEPS.md).
+
+## v8.9.0 — 관련 증거·AI 재사용·규칙 밖 탐색·사람 판정
+
+분석 경로는 이미 저장한 요청·응답만 사용하며 대상 추가 요청·DNS를 보내지 않습니다. 별도 수집 경로와 모델 서버 통신을 구분합니다. 정상 비교 자료와 실제 의심 대상을 분리하고, AI 탐색 결과는 미확정 가설로 남깁니다.
+
+```mermaid
+flowchart TB
+    engineer["보안 엔지니어"]
+    model["ChatGPT 로그인 모델"]
+    subgraph system["Passive Scan v8.9.0"]
+        collect(["유지 · URL 수집 / 기록 가져오기"])
+        evidence(["개선 · 저장 비교·흐름·응답 차이 묶음"])
+        rules(["유지 · 33유형 규칙 후보 추천"])
+        ai(["개선 · 예산 내 AI 검토"])
+        discovery(["신규 · 규칙 밖 저장 자료의 가설 탐색"])
+        cache(["신규 · 검증된 과거 결과 재사용"])
+        feedback(["신규 · 증거별 사람 판정 반영"])
+        view(["개선 · 근거·차이·검토 상태 확인"])
+        collect --> evidence
+        evidence --> rules
+        evidence --> discovery
+        rules --> ai
+        cache --> ai
+        cache --> discovery
+        ai --> view
+        discovery --> view
+        feedback --> view
+        feedback --> ai
+    end
+    engineer --> collect
+    engineer --> feedback
+    engineer --> view
+    model --- ai
+    model --- discovery
+    classDef added fill:#fff0d6,stroke:#d77b00,color:#704000
+    classDef improved fill:#e5f2ff,stroke:#2574ba,color:#164b78
+    classDef kept fill:#edf0f3,stroke:#798596,color:#344252
+    class discovery,cache,feedback added
+    class evidence,ai,view improved
+    class collect,rules kept
+```
+
+신규는 주황, 개선은 파랑, 유지는 회색이며 텍스트에도 구분을 붙였습니다. 수집 설정 httpx 20워커 및 각 `-rl 10 -t 5`는 유지합니다. 캐시 적중은 새 모델 실행이 아니며, 탐색 빈 결과·사람 기각은 취약점 부재의 증명이 아닙니다. 아래 전체 프로세스와 과거 버전 기록을 보존합니다.
+
+---
+
+이전 비교 기준: **8.7.0 → 8.8.0**. [공식 주제별 구현 범위](V88.md) · [검증](V88_VERIFICATION.json) · [남은 단계](REMAINING_STEPS.md).
 
 ## v8.8.0 — PortSwigger 주제 매핑과 점검 범위
 
