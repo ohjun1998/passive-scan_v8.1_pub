@@ -1,6 +1,42 @@
 # 유스케이스와 기능 변경
 
-현재 비교 기준: **8.5.2 → 8.6.0**. [최적화·고도화 안내](V86.md) · [남은 단계](REMAINING_STEPS.md). 아래 이전 버전의 전체 프로세스와 변경 기록도 유지합니다.
+현재 비교 기준: **8.6.0 → 8.6.1**. [AI 실행 수정 안내](V861.md) · [남은 단계](REMAINING_STEPS.md). 아래 이전 버전의 전체 프로세스와 변경 기록도 유지합니다.
+
+## v8.6.1 — 저장 증거의 실제 AI 분석
+
+주황/신규는 전송 스키마 호환 처리, 파랑/개선은 시작·경고·결과 검증, 회색/유지는 저장 증거와 기존 ChatGPT 로그인입니다. 진단자·검토자는 시스템 경계 밖에 있습니다.
+
+```mermaid
+flowchart TB
+    operator["진단자"]
+    reviewer["검토자"]
+    subgraph system["Passive Scan v8.6.1"]
+        saved(["유지 · 저장 증거 준비"])
+        doctor(["개선 · 실제 응답 진단"])
+        schema(["신규 · 전송 스키마 호환 처리"])
+        analyze(["개선 · Codex 분석 시작·경고 처리"])
+        auth(["유지 · ChatGPT 로그인 재사용"])
+        verify(["개선 · 결과·인용 검증"])
+    end
+    operator --- saved
+    operator --- doctor
+    saved -. "마스킹한 비교 자료" .-> analyze
+    doctor -. "응답 확인 후" .-> analyze
+    schema -. "지원 형식" .-> analyze
+    auth -. "기존 인증" .-> analyze
+    analyze -. "완료 결과" .-> verify
+    reviewer --- verify
+    classDef added fill:#fff1df,stroke:#d77708,color:#663600
+    classDef changed fill:#e7f3ff,stroke:#2675bb,color:#163e65
+    classDef kept fill:#edf0f3,stroke:#798596,color:#344252
+    class schema added
+    class doctor,analyze,verify changed
+    class saved,auth kept
+```
+
+분석 프로세스는 별도 임시 폴더에서 명시적인 저장 증거 프롬프트만 처리합니다. 프로젝트 문서 탐색·스킬 설치·훅·알림을 이 프로세스에서 끄며, 호출자의 저장소 지침과 CLI 관리 정책·읽기 전용 샌드박스는 유지합니다. 경고만으로 검토 완료를 인정하지 않습니다. 전송 스키마를 조정해도 원본 결과 계약의 중복 ID·인용 검사는 유지합니다.
+
+이전 비교 기준: **8.5.2 → 8.6.0**. [최적화·고도화 안내](V86.md).
 
 ## v8.6.0 — 수집부터 보고서까지
 

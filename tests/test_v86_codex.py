@@ -12,7 +12,8 @@ from unittest.mock import patch
 
 from recon81.ai_review import build_packet, load_json
 from recon81.codex_review import (
-    ReviewFailure, _configuration, _process, configuration_session, execute_packet, run_review,
+    ReviewFailure, _configuration, _process, _validate_events, configuration_session,
+    diagnose, execute_packet, run_review,
 )
 from recon81.core import normalize_record
 from recon81.reports import generate
@@ -58,10 +59,13 @@ class CodexTransportV86Tests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
 
     def preflight(self, args, cwd, timeout, prompt=None, **kwargs):
+        if args[1:] == ['--version']:
+            return 'codex-cli 0.162.1\n', ''
         if args[1:3] == ['login', 'status']:
             return '', 'Logged in using ChatGPT'
         if args[1:3] == ['features', 'list']:
-            return 'shell_tool stable true\napps experimental true\n', ''
+            return ('shell_tool stable true\napps experimental true\nhooks stable true\n'
+                    'shell_snapshot stable true\nshell_snapshot_v2 under development false\n'), ''
         if args[1:3] == ['mcp', 'list']:
             return '[{"name":"saved_server"}]', ''
         self.fail('Unexpected process request in preflight-only test')
@@ -107,7 +111,36 @@ class CodexTransportV86Tests(unittest.TestCase):
                 _process(['offline-adapter'], self.root, .05)
         self.assertEqual('EXECUTION_TIMEOUT', caught.exception.code)
 
-    def test_legacy_and_batch_share_monitored_execution_and_schema_validation(self):
+    def test_startup_warning_is_not_a_tool_or_a_model_response_and_content_stays_private(self):
+        warning = {'type': 'item.completed', 'item': {
+            'type': 'error', 'message': 'Startup warning with NEVER_SAVE diagnostic data.',
+        }}
+        process = WaitingProcess([warning])
+        progress = []
+        with patch('recon81.codex_review.subprocess.Popen', return_value=process), \
+                patch('recon81.codex_review._stop', side_effect=lambda child: child.stop()):
+            with self.assertRaises(ReviewFailure) as caught:
+                _process(['offline-adapter'], self.root, .05, on_event=progress.append,
+                         first_response_timeout=.05)
+        self.assertEqual('FIRST_RESPONSE_TIMEOUT', caught.exception.code)
+        self.assertFalse(caught.exception.diagnostic['model_response_seen'])
+        self.assertEqual([{'type': 'item.completed', 'item_type': 'error'}], progress)
+        self.assertNotIn('NEVER_SAVE', json.dumps(caught.exception.diagnostic) + json.dumps(progress))
+
+    def test_warning_receipts_require_real_completion_and_fatal_errors_still_fail(self):
+        warning = {'type': 'item.completed', 'item': {'type': 'error', 'message': 'Deprecated feature.'}}
+        _validate_events('\n'.join(map(json.dumps, [warning, *EVENTS])))
+        for invalid in (
+            [warning],
+            [warning, {'type': 'turn.completed'}],
+            [*EVENTS, {'type': 'error', 'message': 'Fatal error.'}],
+            [*EVENTS, {'type': 'turn.failed', 'error': {'message': 'Failed turn.'}}],
+            [*EVENTS, {'type': 'item.completed', 'item': {'type': 'command_execution'}}],
+        ):
+            with self.subTest(events=invalid), self.assertRaises(ValueError):
+                _validate_events('\n'.join(map(json.dumps, invalid)))
+
+    def test_probe_legacy_and_batch_disable_implicit_processes_and_validate_completion(self):
         report = self.make_report()
         batch = self.root / 'batch'
         prepare_batch(report, batch, ['example.test'])
@@ -121,10 +154,21 @@ class CodexTransportV86Tests(unittest.TestCase):
             self.assertTrue(callable(kwargs['on_event']))
             self.assertEqual(10, kwargs['first_response_timeout'])
             self.assertIn('features.shell_tool=false', args)
+            self.assertIn('notify=[]', args)
+            self.assertIn('skills.bundled.enabled=false', args)
+            self.assertIn('project_doc_max_bytes=0', args)
+            for feature in ('hooks', 'shell_snapshot', 'shell_snapshot_v2'):
+                self.assertIn('features.' + feature + '=false', args)
             self.assertIn('mcp_servers.saved_server.enabled=false', args)
             self.assertIn('read-only', args)
             self.assertIn('--ephemeral', args)
             schema = load_json(Path(args[args.index('--output-schema') + 1]))
+            events = [{'type': 'item.completed', 'item': {'type': 'error', 'message': 'Startup warning.'}},
+                      *EVENTS]
+            if schema['required'] == ['ready']:
+                Path(args[args.index('-o') + 1]).write_text('{"ready":true}')
+                monitored.append('probe')
+                return '\n'.join(map(json.dumps, events)), ''
             selected = json.loads(prompt.split('UNTRUSTED_EVIDENCE_JSON\n', 1)[1])
             self.assertEqual(selected['schema_version'] == '8.5',
                              'citations' in schema['properties']['reviews']['items']['required'])
@@ -133,14 +177,36 @@ class CodexTransportV86Tests(unittest.TestCase):
             value = {'packet_id': selected['packet_id'], 'summary': 'Offline fixture.', 'reviews': []}
             Path(args[args.index('-o') + 1]).write_text(json.dumps(value))
             monitored.append(selected['schema_version'])
-            return '\n'.join(map(json.dumps, EVENTS)), ''
+            return '\n'.join(map(json.dumps, events)), ''
 
         with patch('recon81.codex_review._process', side_effect=adapter):
+            probe = diagnose(probe=True, timeout=10)
             run_review(report, self.root / 'legacy', ['example.test'], timeout=10)
             _, receipt = execute_packet(packet, timeout=10)
-        self.assertEqual(['8.4', '8.5'], monitored)
+        self.assertTrue(probe['model_execution_verified'])
+        self.assertEqual(['probe', '8.4', '8.5'], monitored)
         self.assertEqual('legacy_unverified', load_json(self.root / 'legacy' / 'execution.json')['citation_validation'])
         self.assertEqual('verified', receipt['citation_validation'])
+
+    def test_implicit_process_controls_are_capability_gated_and_leave_user_config_intact(self):
+        config = self.home / 'config.toml'
+        original = 'notify = ["offline-notifier"]\n[features]\nhooks = true\nshell_snapshot = true\n'
+        config.write_text(original)
+        for supported in ((), ('hooks',), ('hooks', 'shell_snapshot', 'shell_snapshot_v2')):
+            def capabilities(args, cwd, timeout, prompt=None, **kwargs):
+                if args[1:3] == ['features', 'list']:
+                    return '\n'.join(name + ' stable true' for name in ('shell_tool', *supported)), ''
+                return self.preflight(args, cwd, timeout, prompt, **kwargs)
+
+            with self.subTest(supported=supported), \
+                    patch('recon81.codex_review._process', side_effect=capabilities):
+                flags = _configuration(self.root)
+            self.assertIn('notify=[]', flags)
+            self.assertIn('skills.bundled.enabled=false', flags)
+            self.assertIn('project_doc_max_bytes=0', flags)
+            for feature in ('hooks', 'shell_snapshot', 'shell_snapshot_v2'):
+                self.assertEqual(feature in supported, 'features.' + feature + '=false' in flags)
+            self.assertEqual(original, config.read_text())
 
     def test_legacy_tool_event_stops_process_before_publication(self):
         report = self.make_report()

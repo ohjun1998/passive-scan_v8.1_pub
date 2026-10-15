@@ -158,16 +158,45 @@
   "pull_request": {
     "number": 5,
     "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/pull/5",
-    "state": "open",
+    "state": "merged",
     "draft": false,
     "branch": "codex/v860-integrity-performance",
-    "main_updated": false,
-    "merge_approval_required": true,
-    "approval_block": "Automatic approval review rejected merging into main because this exact merge was not explicitly authorized."
+    "main_updated": true,
+    "merge_approval_required": false,
+    "merged_at": "2026-10-15T08:56:25Z",
+    "merge_commit": "911bd7355c916a884c0bb77e80944460b30fe66a",
+    "user_merge_approval_received": true,
+    "previous_approval_block": "Automatic approval review rejected merging into main because this exact merge was not explicitly authorized."
   },
   "release": {
     "version": "8.6.0",
-    "status": "not_published",
-    "reason": "Awaiting explicit main-branch merge approval; release workflow runs after merge."
+    "status": "published",
+    "prerelease": true,
+    "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/releases/tag/v8.6.0",
+    "published_at": "2026-10-15T08:57:38Z",
+    "verified_date_kst": "2026-10-15",
+    "tag": "v8.6.0",
+    "tag_commit": "911bd7355c916a884c0bb77e80944460b30fe66a",
+    "workflow_run_id": 38709272944,
+    "workflow_status": "success",
+    "workflow_url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/actions/runs/38709272944",
+    "assets": [
+      {
+        "name": "passive-scan-8.6.0.zip",
+        "size_bytes": 317268,
+        "github_reported_digest": "sha256:35554b4508236043b56ca3f37cd6fb464c4f152ffd6ca00dc6ebad54429335a5"
+      },
+      {
+        "name": "SHA256SUMS",
+        "size_bytes": 89,
+        "github_reported_digest": "sha256:a492df8c7d7c08d91853386bc50bca21de109bc578df47e953ba42b8ef6a1443"
+      }
+    ]
+  },
+  "main_ci": {
+    "status": "success",
+    "run_id": 38709272789,
+    "tested_head": "911bd7355c916a884c0bb77e80944460b30fe66a",
+    "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/actions/runs/38709272789"
   }
 }

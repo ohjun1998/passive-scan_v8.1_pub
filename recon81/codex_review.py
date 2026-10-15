@@ -1,8 +1,37 @@
+import copy
 import json
 
 
 def _json(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+
+
+def _provider_schema(schema):
+    """Adapt unsupported provider keywords without weakening local validation."""
+    adapted = copy.deepcopy(schema)
+    def visit(node):
+        if not isinstance(node, dict):
+            return
+        node.pop('uniqueItems', None)
+        # Only traverse schema-bearing keywords: property names and enum/default
+        # data may themselves contain a literal key named "uniqueItems".
+        for key in ('properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas'):
+            for child in node.get(key, {}).values():
+                visit(child)
+        for key in ('items', 'additionalProperties', 'additionalItems', 'contains',
+                    'propertyNames', 'not', 'if', 'then', 'else',
+                    'unevaluatedProperties', 'unevaluatedItems'):
+            child = node.get(key)
+            if isinstance(child, list):
+                for entry in child:
+                    visit(entry)
+            else:
+                visit(child)
+        for key in ('allOf', 'anyOf', 'oneOf', 'prefixItems'):
+            for child in node.get(key, []):
+                visit(child)
+    visit(adapted)
+    return adapted
 
 
 def make_prompt(packet):
@@ -77,7 +106,8 @@ from pathlib import Path
 DISABLED_FEATURES = ('shell_tool', 'unified_exec', 'apps', 'multi_agent', 'remote_plugin',
                      'plugins', 'code_mode', 'code_mode_host', 'browser_use', 'browser_use_external',
                      'browser_use_full_cdp_access', 'computer_use', 'image_generation', 'view_image',
-                     'skill_search', 'skill_mcp_dependency_install')
+                     'skill_search', 'skill_mcp_dependency_install', 'hooks',
+                     'shell_snapshot', 'shell_snapshot_v2')
 PROCESS_LIMIT = 2 * 1024 * 1024
 _configuration_cache = ContextVar('codex_review_configuration', default=None)
 
@@ -149,7 +179,9 @@ def _process(args, cwd, timeout, prompt=None, on_event=None, first_response_time
                         if item_type in ('agent_message', 'reasoning'): response_seen.set()
                         kind=event.get('type')
                         allowed_events=('thread.started','turn.started','turn.completed','item.started','item.updated','item.completed','error','turn.failed')
-                        allowed_items=('agent_message','reasoning','todo_list')
+                        # Codex emits nonfatal startup warnings as item.type=error.
+                        # They are diagnostics, not model responses or tool calls.
+                        allowed_items=('agent_message','reasoning','todo_list','error')
                         if kind in allowed_events:
                             execution_seen.set()
                             event_count[0] += 1
@@ -209,7 +241,8 @@ def _process(args, cwd, timeout, prompt=None, on_event=None, first_response_time
         raise ReviewFailure('OUTPUT_LIMIT', 'response', diagnostic())
     if process.returncode:
         error_text = (bytes(buffers[0]) + bytes(buffers[1])).decode('utf-8', errors='replace').lower()
-        code = 'RATE_LIMIT' if any(x in error_text for x in ('rate limit', 'too many requests', 'quota exceeded')) else \
+        code = 'OUTPUT_SCHEMA_UNSUPPORTED' if 'invalid_json_schema' in error_text else \
+               'RATE_LIMIT' if any(x in error_text for x in ('rate limit', 'too many requests', 'quota exceeded')) else \
                'AUTH_REQUIRED' if any(x in error_text for x in ('unauthorized', 'authentication failed', 'login required')) else \
                'NETWORK_ERROR' if any(x in error_text for x in ('connection', 'dns', 'network', 'request timed out')) else 'CLI_FAILED'
         raise ReviewFailure(code, 'process', diagnostic())
@@ -282,7 +315,14 @@ def _read_configuration(cwd, progress=None):
     if not isinstance(servers, list):
         raise ValueError('Unsupported MCP configuration format')
     flags = ['--ask-for-approval', 'never']
-    for value in ('forced_login_method="chatgpt"', 'model_provider="openai"', 'web_search="disabled"'):
+    # This isolated child analyzes the explicit saved-evidence prompt. It does not
+    # need workspace instructions or bundled-skill installation. The calling
+    # reviewer still follows its repository instructions and managed CLI policies.
+    # Hooks, shell snapshots and legacy notify can launch local processes without
+    # emitting model tool events. Disable these only for the evidence review child.
+    for value in ('forced_login_method="chatgpt"', 'model_provider="openai"',
+                  'web_search="disabled"', 'notify=[]', 'skills.bundled.enabled=false',
+                  'project_doc_max_bytes=0'):
         flags += ['-c', value]
     for feature in DISABLED_FEATURES:
         if feature in available:
@@ -386,7 +426,7 @@ def _validate_events(text):
             pass
         elif kind in ('item.started', 'item.updated', 'item.completed'):
             item = event.get('item') or {}
-            if item.get('type') not in ('reasoning', 'agent_message', 'todo_list'):
+            if item.get('type') not in ('reasoning', 'agent_message', 'todo_list', 'error'):
                 raise ValueError('Unexpected model tool activity; result rejected')
             agent_message |= item.get('type') == 'agent_message' and kind == 'item.completed'
         else:
@@ -440,7 +480,7 @@ def _execute_review_packet(packet, schema, timeout, model=None, progress=None, f
         if progress: progress(value, event)
     try:
         with tempfile.TemporaryDirectory(prefix='passive-ai-') as directory:
-            private_write(Path(directory)/'schema.json', _json(schema))
+            private_write(Path(directory)/'schema.json', _json(_provider_schema(schema)))
             flags=_configuration(directory, update)
             args = _execution_args(directory, flags, model)
             update('submission')

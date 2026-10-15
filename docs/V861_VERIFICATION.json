@@ -1,0 +1,63 @@
+{
+  "version": "8.6.1",
+  "checked_at": "2026-10-15T09:25:29.998102+00:00",
+  "local_tests": {
+    "total": 268,
+    "passed": 264,
+    "skipped": 4,
+    "new_regression_tests": 8
+  },
+  "model_probe": {
+    "checks": [
+      "cli",
+      "authentication",
+      "capabilities",
+      "mcp_configuration",
+      "model_probe"
+    ],
+    "cli_version": "0.162.1",
+    "evidence_sent": false,
+    "model_execution_verified": true,
+    "probe_requested": true,
+    "requested_model": null,
+    "schema_version": "8.5.2",
+    "stage": "completed",
+    "status": "ready",
+    "subscription_plan_verified": false,
+    "target_requests_sent": 0
+  },
+  "startup_reproduction": {
+    "baseline_cli_versions": [
+      "0.158.0",
+      "0.159.2",
+      "0.162.1"
+    ],
+    "longest_zero_event_timeout_seconds": 120,
+    "isolated_project_doc_scan_disabled": "startup succeeds",
+    "exact_low_level_hang_cause": "unconfirmed"
+  },
+  "fixes": [
+    "isolated review child skips unrelated project document scan",
+    "nonfatal error items are diagnostics, not tools or model answers",
+    "provider schema excludes uniqueItems; stored schema and local duplicate validation retained",
+    "implicit hooks, notify, shell snapshots and bundled skill install disabled only for review child"
+  ],
+  "saved_evidence_run": {
+    "status": "running",
+    "records": 77,
+    "packets": 36,
+    "completed_attempts": 2,
+    "labels": 50,
+    "target_requests_sent": 0,
+    "model_quality_evaluation": "pending"
+  },
+  "v860_release": {
+    "merged_pr": 5,
+    "commit": "911bd7355c916a884c0bb77e80944460b30fe66a",
+    "url": "https://github.com/ohjun1998/passive-scan_v8.1_pub/releases/tag/v8.6.0",
+    "status": "published"
+  },
+  "v861_release": {
+    "status": "not_published"
+  }
+}
