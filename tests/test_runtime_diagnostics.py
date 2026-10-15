@@ -124,6 +124,28 @@ class RuntimeDiagnosticsTests(unittest.TestCase):
             with self.assertRaises(ReviewFailure):
                 run_batch(directory, first_response_timeout=0)
             process.assert_not_called()
+    def test_batch_default_waits_for_saved_evidence_reasoning_and_records_its_bound(self):
+        directory = self.batch()
+        def fail(packet, timeout, model, progress, first_response_timeout):
+            self.assertEqual(300, timeout)
+            self.assertEqual(180, first_response_timeout)
+            raise ReviewFailure('FIRST_RESPONSE_TIMEOUT', 'response')
+        with patch('recon81.codex_review.execute_packet', side_effect=fail):
+            result = run_batch(directory)
+        pid = result['packets'][0]['packet_id']
+        attempt = load_json(directory / 'attempts' / pid / 'history.json')[0]
+        self.assertEqual({'timeout': 300, 'first_response_timeout': 180, 'requested_model': None},
+                         attempt['settings'])
+    def test_cli_batch_default_is_longer_than_the_evidence_free_doctor_probe(self):
+        summary = {'summary': {'completed_packets': 1, 'packets': 1}}
+        with patch('recon81.review_batch.run_batch', return_value=summary) as batch_run, \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(0, main(['batch-run', '--batch', 'offline-fixture']))
+        batch_run.assert_called_once_with('offline-fixture', 300, None, False, 3, 180)
+        with patch('recon81.codex_review.diagnose', return_value={'status': 'ready'}) as doctor, \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(0, main(['doctor', '--probe']))
+        doctor.assert_called_once_with(True, 60, None, 60)
     def test_batch_receipts_and_evaluation_distinguish_fixture_from_codex(self):
         for name, verified in [('fixture', False), ('verified', True)]:
             directory = self.batch(name)

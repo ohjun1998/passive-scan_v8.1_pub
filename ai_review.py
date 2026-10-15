@@ -35,7 +35,8 @@ def main(argv=None):
     p.add_argument('--batch', required=True); p.add_argument('--packet-id', required=True); p.add_argument('--result', required=True)
     p = sub.add_parser('batch-run')
     p.add_argument('--batch', required=True); p.add_argument('--timeout', type=int, default=300); p.add_argument('--model')
-    p.add_argument('--first-response-timeout', type=int, default=60)
+    p.add_argument('--first-response-timeout', type=int, default=180,
+                   help='Seconds to wait for the first model response; bounded by --timeout (default: 180)')
     p.add_argument('--retry-failed', action='store_true'); p.add_argument('--max-attempts', type=int, default=3)
     p = sub.add_parser('batch-report')
     p.add_argument('--batch', required=True); p.add_argument('--output', required=True)

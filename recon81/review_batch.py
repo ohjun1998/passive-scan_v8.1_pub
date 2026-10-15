@@ -300,7 +300,7 @@ def import_packet(directory,pid,result_path):
 
 
 @serialized
-def run_batch(directory,timeout=300,model=None,retry_failed=False,max_attempts=3,first_response_timeout=60):
+def run_batch(directory,timeout=300,model=None,retry_failed=False,max_attempts=3,first_response_timeout=180):
     from .codex_review import execute_packet,ReviewFailure,_execution_settings,configuration_session
     directory=Path(directory)
     if not 1<=max_attempts<=3:raise ValueError('Invalid attempt cap')

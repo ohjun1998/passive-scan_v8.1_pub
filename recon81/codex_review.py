@@ -6,8 +6,8 @@ def _json(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
 
 
-def _provider_schema(schema):
-    """Adapt unsupported provider keywords without weakening local validation."""
+def _provider_schema(schema, packet=None):
+    """Adapt provider keywords and bind verified packet IDs; keep local validation."""
     adapted = copy.deepcopy(schema)
     def visit(node):
         if not isinstance(node, dict):
@@ -31,6 +31,19 @@ def _provider_schema(schema):
             for child in node.get(key, []):
                 visit(child)
     visit(adapted)
+    if packet is not None:
+        properties = adapted['properties']
+        properties['packet_id']['enum'] = [packet['packet_id']]
+        allowed_ids = sorted({record['observation_id'] for record in packet['evidence']})
+        # Structured Outputs bounds total enum values and large string enums.
+        # Two copies of at most 250 IDs fit those limits. Larger legacy packets
+        # retain the ID pattern and the same strict local membership validation.
+        if 0 < len(allowed_ids) <= 250:
+            review_properties = properties['reviews']['items']['properties']
+            review_properties['observation_ids']['items']['enum'] = list(allowed_ids)
+            if 'citations' in review_properties:
+                citation = review_properties['citations']['items']['properties']
+                citation['observation_id']['enum'] = list(allowed_ids)
     return adapted
 
 
@@ -75,11 +88,18 @@ def make_prompt(packet):
         ' 응답의 누락·마스킹 표시를 존중하고 부족한 근거에 맞춰 신뢰도를 조정하세요.\n'
         '출력 스키마에 맞는 JSON 객체 하나만 반환하세요. 한국어는 자연스럽게 작성하세요.\n'
         + (('v8.5 추가 규칙: 각 의견에 citations를 작성하세요. observation_id, location, pointer, excerpt만 사용하세요. '
+          'packet_id와 observation_id는 입력에서 그대로 복사하고 새 ID를 만들거나 추정하지 마세요. '
+          '각 citations[].observation_id는 해당 의견의 observation_ids와 이 패킷의 evidence에 모두 포함되어야 합니다. '
           'JSON 위치는 RFC 6901 pointer이며 실제 값과 정확히 같은 excerpt를 쓰세요. text 위치는 빈 pointer와 실제 연속 발췌를 쓰세요. '
+          'JSON 문자열의 excerpt에는 문자열을 감싼 JSON 따옴표 없이 실제 문자열 값을 쓰세요. '
+          '숫자·불리언·null·배열·객체는 키를 정렬하고 불필요한 공백을 제거한 canonical JSON으로 인용하세요. 비ASCII 문자는 그대로 두세요. '
+          '헤더는 저장된 headers 배열의 실제 인덱스와 필드에 pointer를 지정하세요. 예를 들어 첫 번째 헤더의 값은 /0/value입니다. '
+          'excerpt는 그 pointer가 가리키는 실제 값만 쓰고, 헤더 이름과 값을 합친 문장이나 의역으로 바꾸지 마세요. '
           'json_fragment는 values의 원본 pointer 키만 인용하세요. 가려진 값의 유효성을 주장하지 마세요. '
           'authority.identity는 저장된 신원 응답 연결이며 세션의 독립 검증이 아닙니다. policy는 출처가 있는 선언입니다. '
           '모든 fragment는 전체 본문의 일부이며 다른 묶음의 내용을 추정하지 마세요. '
-          '의심 및 정상 가능성 의견은 실제 인용이 필요합니다. 증거가 없으면 insufficient_evidence로 남기세요.\n')
+          '의심 및 정상 가능성 의견은 실제 인용이 필요합니다. 증거가 없으면 insufficient_evidence로 남기세요. '
+          'insufficient_evidence 의견에서 정확히 일치하는 인용을 찾지 못하면 citations: []로 남기고 인용을 만들어 내지 마세요.\n')
          if packet.get('schema_version') == '8.5' else '') + '\nUNTRUSTED_EVIDENCE_JSON\n' + _json(packet)
     )
 
@@ -480,7 +500,7 @@ def _execute_review_packet(packet, schema, timeout, model=None, progress=None, f
         if progress: progress(value, event)
     try:
         with tempfile.TemporaryDirectory(prefix='passive-ai-') as directory:
-            private_write(Path(directory)/'schema.json', _json(_provider_schema(schema)))
+            private_write(Path(directory)/'schema.json', _json(_provider_schema(schema, packet)))
             flags=_configuration(directory, update)
             args = _execution_args(directory, flags, model)
             update('submission')
