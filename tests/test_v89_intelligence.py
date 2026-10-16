@@ -25,7 +25,8 @@ def reviewed(packet, *args):
     return {'packet_id': packet['packet_id'], 'reviews': [{'candidate_id': c['candidate_id'], 'disposition': 'needs_context',
         'priority': 'low', 'reason': '저장 자료의 후속 점검 후보입니다.', 'next_check': '실제 정책을 확인하세요.'} for c in packet['candidates']]}, {
         'provider': 'codex_chatgpt_login', 'status': 'completed', 'candidate_validation': 'verified',
-        'completion_events_verified': True, 'model_execution_verified': True, 'tools_disabled': True, 'requested_model': None, 'prompt_sha256': digest(review_prompt(packet))}
+        'completion_events_verified': True, 'model_execution_verified': True, 'tools_disabled': True,
+        'requested_model': 'gpt-6.1-sol', 'requested_reasoning_effort': 'medium', 'prompt_sha256': digest(review_prompt(packet))}
 
 
 def result_for(task, findings=False):
@@ -38,7 +39,8 @@ def result_for(task, findings=False):
 
 def discovered(task, *args):
     return result_for(task, True), {'provider': 'codex_chatgpt_login', 'status': 'completed', 'discovery_validation': 'verified',
-        'completion_events_verified': True, 'model_execution_verified': True, 'tools_disabled': True, 'requested_model': None, 'prompt_sha256': digest(discovery_prompt(task))}
+        'completion_events_verified': True, 'model_execution_verified': True, 'tools_disabled': True,
+        'requested_model': 'gpt-6.1-sol', 'requested_reasoning_effort': 'medium', 'prompt_sha256': digest(discovery_prompt(task))}
 
 
 class ContextTests(unittest.TestCase):

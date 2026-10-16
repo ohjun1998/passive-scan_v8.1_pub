@@ -11,8 +11,9 @@ from urllib.parse import urlsplit
 
 from .core import canonical, digest, invalid_json_constant
 from .ai_review import _no_duplicates
+from .codex_review import DEFAULT_MODEL, DEFAULT_REASONING_EFFORT
 
-CACHE_VERSION = '8.9.0-3'
+CACHE_VERSION = '8.9.0-4'
 MAX_ENTRY = 512 * 1024
 
 
@@ -36,7 +37,9 @@ def runtime_fingerprint(model=None):
                 return None
         stable_environment.append((key, value))
     # This includes secret-bearing local configuration/environment: persist its digest only.
-    return hashlib.sha256(repr((CACHE_VERSION, model, stable_environment, executable, files)).encode()).hexdigest()
+    model = DEFAULT_MODEL if model is None else model
+    return hashlib.sha256(repr((CACHE_VERSION, model, DEFAULT_REASONING_EFFORT,
+                               stable_environment, executable, files)).encode()).hexdigest()
 
 
 def verified_receipt(receipt, stage):
@@ -88,6 +91,8 @@ class DecisionCache:
                 raise ValueError('Invalid cache content')
             entry = json.loads(text, parse_constant=invalid_json_constant, object_pairs_hook=_no_duplicates)
             if entry['cache_key'] != key or entry['namespace'] != namespace: raise ValueError('Mismatched cache entry')
+            if not isinstance(entry['receipt'], dict) or entry['receipt'].get('requested_reasoning_effort') != DEFAULT_REASONING_EFFORT:
+                raise ValueError('Mismatched reasoning effort')
             result = validator(entry['packet'], entry['result'], entry['receipt'])
             return result, {'origin_packet_id': entry['packet']['packet_id'], 'origin_receipt': entry['receipt'],
                             'cached_at_epoch': created, 'cache_key': key}
@@ -97,6 +102,7 @@ class DecisionCache:
 
     def put(self, namespace, value, packet, result, receipt):
         if self.conn is None: return
+        if receipt.get('requested_reasoning_effort') != DEFAULT_REASONING_EFFORT: return
         if runtime_fingerprint(receipt.get('requested_model')) != self.fingerprint: return
         key = self.key(namespace, value)
         entry = {'cache_key': key, 'namespace': namespace, 'packet': packet, 'result': result, 'receipt': receipt}

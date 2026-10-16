@@ -100,7 +100,8 @@ def render(report):
 def create_recommendations(report_path, output, patterns, authority=None, ai=False, ai_limit=24,
                            batch_size=8, workers=2, timeout=300, model=None, first_response_timeout=180, include_surfaces=False,
                            discover=False, discovery_limit=4, cache_path=None, cache_age=86400, feedback_path=None):
-    from .codex_review import _execution_settings
+    from .codex_review import _execution_settings, DEFAULT_MODEL, DEFAULT_REASONING_EFFORT
+    model = DEFAULT_MODEL if model is None else model
     started = time.monotonic()
     if not 1 <= ai_limit <= 100 or not 1 <= batch_size <= 12 or not 1 <= workers <= 4:
         raise ValueError('Invalid candidate AI budget')
@@ -167,7 +168,8 @@ def create_recommendations(report_path, output, patterns, authority=None, ai=Fal
         'source_receipts': receipts, 'source_manifest_verified': manifest is not None, 'scope': patterns,
         'authority_configuration_sha256': digest(authority) if authority is not None else None,
         'ai_settings': {'requested': ai, 'max_new_units': ai_limit, 'max_candidates': ai_limit, 'batch_size': batch_size, 'workers': workers,
-                        'requested_model': model, 'include_surfaces': include_surfaces, 'discovery_requested': discover,
+                        'requested_model': model, 'requested_reasoning_effort': DEFAULT_REASONING_EFFORT,
+                        'include_surfaces': include_surfaces, 'discovery_requested': discover,
                         'max_new_discovery_tasks': discovery_limit, 'cache_requested': cache_path is not None, 'cache_max_age': cache_age,
                         'first_response_timeout': min(timeout, first_response_timeout), 'timeout': timeout},
         'summary': summary, 'records': record_rows, 'candidates': candidates, 'executions': run['executions'],

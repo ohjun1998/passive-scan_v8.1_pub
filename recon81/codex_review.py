@@ -1,6 +1,9 @@
 import copy
 import json
 
+DEFAULT_MODEL = 'gpt-6.1-sol'
+DEFAULT_REASONING_EFFORT = 'medium'
+
 
 def _json(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
@@ -361,8 +364,9 @@ def _execution_args(directory, flags, model=None):
     args = ['codex'] + flags + ['exec', '--json', '--sandbox', 'read-only', '--ephemeral',
             '--skip-git-repo-check', '--output-schema', str(Path(directory) / 'schema.json'),
             '-o', str(Path(directory) / 'result.json')]
-    if model:
-        args += ['--model', model]
+    # Pin both settings for this review child, independently of user CLI defaults.
+    args += ['--model', DEFAULT_MODEL if model is None else model,
+             '-c', 'model_reasoning_effort="' + DEFAULT_REASONING_EFFORT + '"']
     return args + ['-']
 
 
@@ -383,8 +387,10 @@ def diagnose(probe=False, timeout=60, model=None, first_response_timeout=60):
     def progress(stage):
         report['stage'] = stage
     try:
+        model = DEFAULT_MODEL if model is None else model
         _execution_settings(timeout, model, first_response_timeout)
         report['requested_model'] = model
+        report['requested_reasoning_effort'] = DEFAULT_REASONING_EFFORT
         with tempfile.TemporaryDirectory(prefix='passive-doctor-') as directory:
             progress('cli')
             version, _ = _process(['codex', '--version'], directory, 20)
@@ -502,6 +508,7 @@ def _execute_json(prompt, schema, validator, timeout=300, model=None, progress=N
     """Shared read-only transport; callers supply a strict schema and local validator."""
     from .ai_review import load_json
     from .core import private_write
+    model = DEFAULT_MODEL if model is None else model
     _execution_settings(timeout, model, first_response_timeout)
     stage = 'preflight'
     def update(value, event=None):
@@ -535,5 +542,6 @@ def _execute_json(prompt, schema, validator, timeout=300, model=None, progress=N
     except (ValueError,KeyError,TypeError,RecursionError,OSError):
         raise ReviewFailure('INVALID_COMPLETION_OR_RESULT', stage) from None
     return result, {'provider':'codex_chatgpt_login','status':'completed','model_execution_verified':True,
-        'subscription_plan_verified':False,'requested_model':model,'tools_disabled':True,
+        'subscription_plan_verified':False,'requested_model':model,
+        'requested_reasoning_effort':DEFAULT_REASONING_EFFORT,'tools_disabled':True,
         'completion_events_verified':True, 'output_validation':'verified'}

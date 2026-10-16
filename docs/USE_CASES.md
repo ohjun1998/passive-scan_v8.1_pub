@@ -1,5 +1,33 @@
 # 유스케이스와 기능 변경
 
+## 2026-10-16 — 기본 모델과 추론 강도 지정
+
+비교 기준: v8.9.0 모델 미지정 → **GPT-6.1 Sol / medium 명시**. [설정·처리 규모](MODEL_AND_SCALE.md).
+
+```mermaid
+flowchart TB
+    user["보안 엔지니어"]
+    service["ChatGPT 로그인 모델 서비스"]
+    subgraph system["Passive Scan"]
+        source(["유지 · 전체 저장 자료의 규칙 분석"])
+        review(["개선 · Sol medium으로 예산 내 검토"])
+        audit(["개선 · 요청 모델·강도 기록과 캐시 구분"])
+        source --> review
+        review --> audit
+    end
+    user --> source
+    user --> audit
+    review --- service
+    classDef improved fill:#e5f2ff,stroke:#2574ba,color:#164b78
+    classDef kept fill:#edf0f3,stroke:#798596,color:#344252
+    class review,audit improved
+    class source kept
+```
+
+파랑은 개선, 회색은 유지입니다. 신규 유스케이스는 없습니다. 기본 새 검토 예산 24단위·동시 2개, 대상 추가 요청 0건과 httpx 수집 설정을 유지합니다. 설정 변경만으로 모델을 호출하지 않습니다.
+
+---
+
 현재 비교 기준: **8.8.0 → 8.9.0**. [저장 증거 분석 사용법](V89.md) · [검증](V89_VERIFICATION.json) · [남은 단계](REMAINING_STEPS.md).
 
 ## v8.9.0 — 관련 증거·AI 재사용·규칙 밖 탐색·사람 판정

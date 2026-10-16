@@ -3,6 +3,7 @@
 import argparse
 import sys
 from recon81.ai_review import prepare_review, import_review
+from recon81.codex_review import DEFAULT_MODEL
 
 
 def main(argv=None):
@@ -10,7 +11,7 @@ def main(argv=None):
     sub = parser.add_subparsers(dest='command', required=True)
     p = sub.add_parser('doctor', help='Check Codex setup; --probe sends a fixed evidence-free model request')
     p.add_argument('--probe', action='store_true'); p.add_argument('--output')
-    p.add_argument('--timeout', type=int, default=60); p.add_argument('--model')
+    p.add_argument('--timeout', type=int, default=60); p.add_argument('--model', default=DEFAULT_MODEL)
     p.add_argument('--first-response-timeout', type=int, default=60)
     for command in ('prepare', 'codex'):
         p = sub.add_parser(command)
@@ -21,7 +22,7 @@ def main(argv=None):
         p.add_argument('--max-bytes', type=int, default=500000)
         if command == 'codex':
             p.add_argument('--timeout', type=int, default=600)
-            p.add_argument('--model')
+            p.add_argument('--model', default=DEFAULT_MODEL)
     p = sub.add_parser('import')
     p.add_argument('--packet', required=True)
     p.add_argument('--result', required=True)
@@ -34,7 +35,7 @@ def main(argv=None):
     p = sub.add_parser('batch-import')
     p.add_argument('--batch', required=True); p.add_argument('--packet-id', required=True); p.add_argument('--result', required=True)
     p = sub.add_parser('batch-run')
-    p.add_argument('--batch', required=True); p.add_argument('--timeout', type=int, default=300); p.add_argument('--model')
+    p.add_argument('--batch', required=True); p.add_argument('--timeout', type=int, default=300); p.add_argument('--model', default=DEFAULT_MODEL)
     p.add_argument('--first-response-timeout', type=int, default=180,
                    help='Seconds to wait for the first model response; bounded by --timeout (default: 180)')
     p.add_argument('--retry-failed', action='store_true'); p.add_argument('--max-attempts', type=int, default=3)
@@ -51,7 +52,7 @@ def main(argv=None):
     p.add_argument('--ai-include-surfaces', action='store_true', help='Include feature inspection surfaces in the existing AI budget')
     p.add_argument('--ai-batch-size', type=int, default=8); p.add_argument('--ai-workers', type=int, default=2)
     p.add_argument('--timeout', type=int, default=300); p.add_argument('--first-response-timeout', type=int, default=180)
-    p.add_argument('--model')
+    p.add_argument('--model', default=DEFAULT_MODEL, help='Codex model ID (default: gpt-6.1-sol; reasoning: medium)')
     p.add_argument('--discover', action='store_true', help='Inspect bounded saved records outside rule signals; requires --ai')
     p.add_argument('--discovery-limit', type=int, default=4)
     cache = p.add_mutually_exclusive_group()

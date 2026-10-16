@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from ai_review import main
 from recon81.ai_review import load_json
-from recon81.codex_review import diagnose, execute_packet, ReviewFailure
+from recon81.codex_review import diagnose, execute_packet, ReviewFailure, DEFAULT_MODEL
 from recon81.context import attach_context
 from recon81.core import normalize_record
 from recon81.reports import generate
@@ -134,18 +134,19 @@ class RuntimeDiagnosticsTests(unittest.TestCase):
             result = run_batch(directory)
         pid = result['packets'][0]['packet_id']
         attempt = load_json(directory / 'attempts' / pid / 'history.json')[0]
-        self.assertEqual({'timeout': 300, 'first_response_timeout': 180, 'requested_model': None},
+        self.assertEqual({'timeout': 300, 'first_response_timeout': 180, 'requested_model': DEFAULT_MODEL,
+                          'requested_reasoning_effort': 'medium'},
                          attempt['settings'])
     def test_cli_batch_default_is_longer_than_the_evidence_free_doctor_probe(self):
         summary = {'summary': {'completed_packets': 1, 'packets': 1}}
         with patch('recon81.review_batch.run_batch', return_value=summary) as batch_run, \
                 contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(0, main(['batch-run', '--batch', 'offline-fixture']))
-        batch_run.assert_called_once_with('offline-fixture', 300, None, False, 3, 180)
+        batch_run.assert_called_once_with('offline-fixture', 300, DEFAULT_MODEL, False, 3, 180)
         with patch('recon81.codex_review.diagnose', return_value={'status': 'ready'}) as doctor, \
                 contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(0, main(['doctor', '--probe']))
-        doctor.assert_called_once_with(True, 60, None, 60)
+        doctor.assert_called_once_with(True, 60, DEFAULT_MODEL, 60)
     def test_batch_receipts_and_evaluation_distinguish_fixture_from_codex(self):
         for name, verified in [('fixture', False), ('verified', True)]:
             directory = self.batch(name)

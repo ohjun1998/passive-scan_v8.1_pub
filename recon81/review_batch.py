@@ -305,7 +305,8 @@ def import_packet(directory,pid,result_path):
 
 @serialized
 def run_batch(directory,timeout=300,model=None,retry_failed=False,max_attempts=3,first_response_timeout=180):
-    from .codex_review import execute_packet,ReviewFailure,_execution_settings,configuration_session
+    from .codex_review import execute_packet,ReviewFailure,_execution_settings,configuration_session,DEFAULT_MODEL,DEFAULT_REASONING_EFFORT
+    model=DEFAULT_MODEL if model is None else model
     directory=Path(directory)
     if not 1<=max_attempts<=3:raise ValueError('Invalid attempt cap')
     _execution_settings(timeout,model,first_response_timeout)
@@ -322,7 +323,8 @@ def run_batch(directory,timeout=300,model=None,retry_failed=False,max_attempts=3
             started=time.monotonic()
             attempt={'number':len(history)+1,'status':'started','stage':'preflight','stage_history':[{'stage':'preflight','elapsed_seconds':0}],
                      'events':[],'target_requests_sent':0,
-                     'settings':{'timeout':timeout,'first_response_timeout':min(first_response_timeout,timeout),'requested_model':model}}
+                     'settings':{'timeout':timeout,'first_response_timeout':min(first_response_timeout,timeout),
+                                 'requested_model':model,'requested_reasoning_effort':DEFAULT_REASONING_EFFORT}}
             history.append(attempt);private_write(history_path,_json(history))
             def progress(stage,event=None):
                 attempt['stage']=stage

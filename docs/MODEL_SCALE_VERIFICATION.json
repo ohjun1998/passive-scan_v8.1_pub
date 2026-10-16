@@ -1,0 +1,110 @@
+{
+  "date": "2026-10-16",
+  "timezone": "Asia/Seoul",
+  "base_commit": "4f2bdedeca46e28ec3ea39978d6edc6ebaea590e",
+  "requested_settings": {
+    "model": "gpt-6.1-sol",
+    "reasoning_effort": "medium",
+    "global_config_modified": false
+  },
+  "verification": {
+    "unit_suite": {
+      "discovered": 342,
+      "passed": 338,
+      "skipped": 4,
+      "failed": 0,
+      "skipped_reason": "Opt-in browser/tool runtime fixtures"
+    },
+    "targeted_after_final_cache_guard": {
+      "passed": 28,
+      "failed": 0
+    },
+    "compileall": "passed",
+    "diff_whitespace_check": "passed",
+    "real_cli_model_request_executed": false,
+    "actual_model_access_verified": false,
+    "saved_77_records_sent_to_model": false,
+    "test_environment_note": "Installed declared graphql-core dependency before successful full suite; no unrelated source fixes."
+  },
+  "synthetic_scale_check": {
+    "fixture": "5000 distinct small normalized synthetic GET/JSON observations; 100 email-field signals; no real target or model",
+    "input_jsonl_bytes": 3976390,
+    "summary": {
+      "source_records": 5000,
+      "out_of_scope_records": 0,
+      "rule_processed_records": 5000,
+      "candidates": 100,
+      "by_kind": {
+        "sensitive_data": 100
+      },
+      "signal_candidates": 100,
+      "review_surfaces": 0,
+      "ai_eligible_candidates": 100,
+      "ai_excluded_surface_count": 0,
+      "ai_human_dismissed_candidates": 0,
+      "ai_selected_candidates": 0,
+      "ai_reviewed_candidates": 0,
+      "ai_reviewed_by_kind": {},
+      "ai_fresh_reviewed_candidates": 0,
+      "ai_reused_candidates": 0,
+      "ai_not_reviewed_candidates": 100,
+      "ai_failed_packets": 0,
+      "ai_oversized_candidates": 0,
+      "ai_new_units_selected": 0,
+      "ai_new_unit_budget": 24,
+      "model_calls": 0,
+      "cache_enabled": false,
+      "cache_invalid_entries": 0,
+      "cache_write_errors": 0,
+      "discovery_new_tasks": 0,
+      "discovery_reused_tasks": 0,
+      "discovery_hypotheses": 0,
+      "discovery_fresh_hypotheses": 0,
+      "discovery_reused_hypotheses": 0,
+      "elapsed_seconds": 1.304,
+      "model_phase_seconds": 0.008,
+      "target_requests_sent": 0,
+      "target_dns_lookups": 0,
+      "confirmed_vulnerabilities": 0,
+      "reproduction_verified": 0
+    },
+    "ai_settings": {
+      "requested": false,
+      "max_new_units": 24,
+      "max_candidates": 24,
+      "batch_size": 8,
+      "workers": 2,
+      "requested_model": "gpt-6.1-sol",
+      "requested_reasoning_effort": "medium",
+      "include_surfaces": false,
+      "discovery_requested": false,
+      "max_new_discovery_tasks": 4,
+      "cache_requested": false,
+      "cache_max_age": 86400,
+      "first_response_timeout": 180,
+      "timeout": 300
+    },
+    "offline_ai_plan": {
+      "selected_candidates": 24,
+      "planned_cli_review_packets": 3,
+      "oversized_candidates": 0,
+      "actual_cli_executions": 0,
+      "actual_model_requests": 0,
+      "unselected_candidates": 76
+    }
+  },
+  "unchanged_budget": {
+    "new_review_units": 24,
+    "candidate_batch_size": 8,
+    "workers": 2,
+    "candidate_packet_bytes": 24576,
+    "discovery_units": 4
+  },
+  "limitations": [
+    "Small synthetic JSON bodies, sparse signals and independent paths; not a real-traffic or live-model benchmark.",
+    "CLI packet counts do not measure provider internal model requests.",
+    "All-candidate review is not completed by a bounded single run.",
+    "Large reports remain subject to candidate, source-file, context and evidence-display limits.",
+    "The previous 77-record additional model-transfer approval remains outstanding."
+  ]
+}
